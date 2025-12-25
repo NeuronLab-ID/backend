@@ -111,6 +111,11 @@ async def get_problem(problem_id: int, user_id: int = Depends(get_current_user))
         if problem.cuda_test_cases:
             result["cuda_test_cases"] = json.loads(problem.cuda_test_cases)
         
+        # Playground fields
+        if problem.playground_enabled:
+            result["playground_enabled"] = problem.playground_enabled
+            result["playground_code"] = problem.playground_code
+        
         return result
     finally:
         db.close()

@@ -92,6 +92,9 @@ class Problem(Base):
     tinygrad_test_cases = Column(Text, nullable=True)
     cuda_starter_code = Column(Text, nullable=True)
     cuda_test_cases = Column(Text, nullable=True)
+    # Playground visualization
+    playground_enabled = Column(Boolean, default=False)
+    playground_code = Column(Text, nullable=True)  # React component code
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
