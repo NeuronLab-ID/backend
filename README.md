@@ -27,7 +27,9 @@ FastAPI backend for the NeuronLab ML learning platform - an interactive platform
 
 - Python 3.10+
 - Docker (for code execution sandbox)
-- OpenAI API key
+- OpenAI API key (or GitHub Copilot with API access)
+
+> **Note:** AI-powered features (hints, solutions, quest generation, math examples) require an OpenAI API key or GitHub Copilot installed on your system with API access enabled.
 
 ### Installation
 
