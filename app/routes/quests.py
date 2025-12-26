@@ -216,7 +216,7 @@ Expected Output: {request.expected_output}
 Explain the reasoning step by step:"""
                 }
             ],
-            max_tokens=1000,
+            max_tokens=2000,
             temperature=0.3
         )
         
@@ -285,14 +285,25 @@ async def get_full_reasoning(problem_id: int, user_id: int = Depends(get_current
 
 
 @router.get("/quest/full-reasoning/{problem_id}/stream")
-async def stream_full_reasoning(problem_id: int, user_id: int = Depends(get_current_user)):
-    """Generate and stream full reasoning for all quest steps using SSE."""
+async def stream_full_reasoning(problem_id: int, force: bool = False, user_id: int = Depends(get_current_user)):
+    """Generate and stream full reasoning for all quest steps using SSE.
+    
+    Args:
+        force: If True, delete existing cached reasoning and regenerate fresh.
+    """
     from app.services.hint_generator import create_client, AI_MODEL
     
     db = SessionLocal()
     try:
         # Check for cached reasoning first
         existing = db.query(QuestReasoning).filter(QuestReasoning.problem_id == problem_id).first()
+        
+        # If force regenerate, delete existing
+        if force and existing:
+            db.delete(existing)
+            db.commit()
+            existing = None
+        
         if existing:
             # Return cached data as SSE events
             cached_data = json.loads(existing.reasoning_data)
@@ -327,6 +338,7 @@ async def stream_full_reasoning(problem_id: int, user_id: int = Depends(get_curr
         try:
             client = create_client()
             all_steps = []
+            previous_context = ""  # Accumulated context from previous steps
             
             # Generate reasoning for each step
             for sq in sub_quests:
@@ -335,6 +347,9 @@ async def stream_full_reasoning(problem_id: int, user_id: int = Depends(get_curr
                 relation = sq.get("relation_to_problem", "")
                 math_content = sq.get("math_content", {})
                 key_formulas = sq.get("key_formulas", [])
+                exercise = sq.get("exercise", {})
+                test_cases = exercise.get("test_cases", [])
+                function_signature = exercise.get("function_signature", "")
                 
                 # Build context for this step
                 formulas_text = "\n".join([
@@ -342,30 +357,58 @@ async def stream_full_reasoning(problem_id: int, user_id: int = Depends(get_curr
                     for f in key_formulas
                 ])
                 
-                prompt = f"""Step {step}: {title}
-Relation to problem: {relation}
+                # Get first test case as example for computation
+                example_input = test_cases[0].get("input", "") if test_cases else ""
+                example_output = test_cases[0].get("expected", "") if test_cases else ""
+                
+                # Build prompt with previous context for correlated steps
+                context_section = ""
+                if previous_context:
+                    context_section = f"""
+### Previous Steps Summary (USE THESE RESULTS):
+{previous_context}
+
+**IMPORTANT**: Build upon the previous steps' results. Reference the computed values and continue the calculation flow.
+"""
+                
+                prompt = f"""Step {step} of {len(sub_quests)}: {title}
+{context_section}
+Relation to main problem: {relation}
 Definition: {math_content.get('definition', '')}
-Theorem: {math_content.get('theorem', '')}
 Key Formulas:
 {formulas_text}
 
-Explain how this step contributes to solving the overall problem. Include:
-1. What mathematical concept is being used
-2. How to apply the formula with a concrete example
-3. How this connects to the next step or final solution
+Function: {function_signature}
+Example Test Case:
+- Input: {example_input}
+- Expected Output: {example_output}
 
-Use LaTeX notation (with $...$ for inline and $$...$$ for display math) for formulas. Keep it concise (3-5 sentences)."""
+Now, explain this step by:
+1. **Concept**: What mathematical concept is being used in this step
+2. **Formula Application**: Show the formula and explain each variable
+3. **Step-by-Step Computation**: Using the example input above, compute the result step-by-step:
+   - Parse the input data
+   - Apply the formula with actual numbers from the input
+   - Show intermediate calculations
+   - Arrive at the expected output
+4. **Key Result**: State the computed value clearly (this will be used in the next step)
+5. **Connection to Next Step**: How this result feeds into the next step
+
+Use LaTeX notation ($...$ for inline, $$...$$ for display math). Be thorough in the computation."""
 
                 response = client.chat.completions.create(
                     model=AI_MODEL,
                     messages=[
                         {
                             "role": "system",
-                            "content": "You are a math tutor explaining step-by-step how to solve a problem. Use LaTeX notation for formulas. Be concise but thorough."
+                            "content": """You are a math tutor explaining how to solve coding problems step-by-step. 
+When given a test case, compute it mathematically showing all intermediate steps and calculations.
+IMPORTANT: If previous steps are provided, you MUST reference their computed results and continue the calculation chain.
+Use LaTeX for formulas. Be detailed and thorough."""
                         },
                         {"role": "user", "content": prompt}
                     ],
-                    max_tokens=500,
+                    max_tokens=3000,
                     temperature=0.3
                 )
                 
@@ -376,6 +419,15 @@ Use LaTeX notation (with $...$ for inline and $$...$$ for display math) for form
                     "reasoning": reasoning
                 }
                 all_steps.append(step_data)
+                
+                # Extract key results for next step context (summarize this step)
+                previous_context += f"""
+**Step {step} - {title}**:
+- Function: `{function_signature}`
+- Input: `{example_input}`
+- Output: `{example_output}`
+- Key concept: {relation[:100] if relation else title}
+"""
                 
                 # Stream this step
                 yield f"data: {json.dumps({'type': 'step', 'data': step_data})}\n\n"
@@ -398,7 +450,7 @@ Use LaTeX notation (with $...$ for inline and $$...$$ for display math) for form
                         "content": f"Summarize how these steps work together to solve the problem:\n{steps_summary}\n\nProvide a 2-3 sentence summary connecting all concepts."
                     }
                 ],
-                max_tokens=200,
+                max_tokens=1000,
                 temperature=0.3
             )
             
