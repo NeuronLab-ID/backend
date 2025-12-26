@@ -8,7 +8,7 @@ from app.config import LOCAL_DEV
 from app.database import SessionLocal
 from app.routes.auth import get_current_user
 from app.models.db import Quest, QuestProgress
-from app.models.schemas import QuestExecuteRequest, QuestCreateRequest, QuestProgressSaveRequest
+from app.models.schemas import QuestExecuteRequest, QuestCreateRequest, QuestProgressSaveRequest, QuestReasoningRequest
 from app.services.executor import execute_code
 
 router = APIRouter()
@@ -178,3 +178,85 @@ async def get_quest_progress(problem_id: int, user_id: int = Depends(get_current
         }
     finally:
         db.close()
+
+
+@router.post("/quest/reasoning")
+async def generate_test_case_reasoning(request: QuestReasoningRequest, user_id: int = Depends(get_current_user)):
+    """Generate step-by-step reasoning for a test case (Input, Process, Output)."""
+    from app.services.hint_generator import create_client, AI_MODEL
+    
+    try:
+        client = create_client()
+        
+        response = client.chat.completions.create(
+            model=AI_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": """You are a programming tutor explaining how to solve a test case step by step.
+Given a function signature, test input, and expected output, explain:
+1. INPUT: What the input represents and its values
+2. PROCESS: The step-by-step calculation/algorithm to transform input to output
+3. OUTPUT: What the final result is and why
+
+Keep each section concise (2-4 sentences max). Use mathematical notation when helpful.
+Format your response EXACTLY as:
+INPUT: [your explanation]
+PROCESS: [your explanation]
+OUTPUT: [your explanation]"""
+                },
+                {
+                    "role": "user",
+                    "content": f"""Function: {request.function_signature}
+Test Input: {request.test_input}
+Expected Output: {request.expected_output}
+
+Explain the reasoning step by step:"""
+                }
+            ],
+            max_tokens=1000,
+            temperature=0.3
+        )
+        
+        content = response.choices[0].message.content or ""
+        
+        # Parse the response into sections
+        input_section = ""
+        process_section = ""
+        output_section = ""
+        
+        lines = content.strip().split('\n')
+        current_section = None
+        
+        for line in lines:
+            line_upper = line.upper()
+            if line_upper.startswith("INPUT:"):
+                current_section = "input"
+                input_section = line[6:].strip()
+            elif line_upper.startswith("PROCESS:"):
+                current_section = "process"
+                process_section = line[8:].strip()
+            elif line_upper.startswith("OUTPUT:"):
+                current_section = "output"
+                output_section = line[7:].strip()
+            elif current_section:
+                if current_section == "input":
+                    input_section += " " + line.strip()
+                elif current_section == "process":
+                    process_section += " " + line.strip()
+                elif current_section == "output":
+                    output_section += " " + line.strip()
+        
+        return {
+            "input": input_section.strip() or f"Input: {request.test_input}",
+            "process": process_section.strip() or "Processing the input to compute the result.",
+            "output": output_section.strip() or f"Expected output: {request.expected_output}"
+        }
+        
+    except Exception as e:
+        # Return a fallback response
+        return {
+            "input": f"Input: {request.test_input}",
+            "process": f"Error generating reasoning: {str(e)}",
+            "output": f"Expected output: {request.expected_output}"
+        }

@@ -129,3 +129,11 @@ class QuestProgressResponse(BaseModel):
     code: str
     completed: bool
     created_at: datetime
+
+
+class QuestReasoningRequest(BaseModel):
+    problem_id: int
+    step: int
+    test_input: str
+    expected_output: str
+    function_signature: str
