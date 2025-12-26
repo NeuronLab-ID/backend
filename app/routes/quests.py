@@ -2,12 +2,14 @@
 Quest routes for CRUD and execution.
 """
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import StreamingResponse
 import json
+import asyncio
 
 from app.config import LOCAL_DEV
 from app.database import SessionLocal
 from app.routes.auth import get_current_user
-from app.models.db import Quest, QuestProgress
+from app.models.db import Quest, QuestProgress, QuestReasoning
 from app.models.schemas import QuestExecuteRequest, QuestCreateRequest, QuestProgressSaveRequest, QuestReasoningRequest
 from app.services.executor import execute_code
 
@@ -260,3 +262,166 @@ Explain the reasoning step by step:"""
             "process": f"Error generating reasoning: {str(e)}",
             "output": f"Expected output: {request.expected_output}"
         }
+
+
+@router.get("/quest/full-reasoning/{problem_id}")
+async def get_full_reasoning(problem_id: int, user_id: int = Depends(get_current_user)):
+    """Get cached full reasoning for a problem if it exists."""
+    db = SessionLocal()
+    try:
+        reasoning = db.query(QuestReasoning).filter(
+            QuestReasoning.problem_id == problem_id
+        ).first()
+        
+        if reasoning:
+            return {
+                "exists": True,
+                "data": json.loads(reasoning.reasoning_data),
+                "created_at": reasoning.created_at.isoformat()
+            }
+        return {"exists": False, "data": None}
+    finally:
+        db.close()
+
+
+@router.get("/quest/full-reasoning/{problem_id}/stream")
+async def stream_full_reasoning(problem_id: int, user_id: int = Depends(get_current_user)):
+    """Generate and stream full reasoning for all quest steps using SSE."""
+    from app.services.hint_generator import create_client, AI_MODEL
+    
+    db = SessionLocal()
+    try:
+        # Check for cached reasoning first
+        existing = db.query(QuestReasoning).filter(QuestReasoning.problem_id == problem_id).first()
+        if existing:
+            # Return cached data as SSE events
+            cached_data = json.loads(existing.reasoning_data)
+            
+            async def stream_cached():
+                for step_data in cached_data.get("steps", []):
+                    yield f"data: {json.dumps({'type': 'step', 'data': step_data})}\n\n"
+                    await asyncio.sleep(0.1)  # Small delay for UI
+                
+                if cached_data.get("summary"):
+                    yield f"data: {json.dumps({'type': 'summary', 'data': cached_data['summary']})}\n\n"
+                
+                yield f"data: {json.dumps({'type': 'done', 'cached': True})}\n\n"
+            
+            return StreamingResponse(stream_cached(), media_type="text/event-stream")
+        
+        # Get quest data
+        quest = db.query(Quest).filter(Quest.problem_id == problem_id).first()
+        if not quest:
+            raise HTTPException(404, "Quest not found")
+        
+        quest_data = json.loads(quest.data)
+        sub_quests = quest_data.get("sub_quests", [])
+        
+        if not sub_quests:
+            raise HTTPException(400, "No quest steps found")
+        
+    finally:
+        db.close()
+    
+    async def generate_stream():
+        try:
+            client = create_client()
+            all_steps = []
+            
+            # Generate reasoning for each step
+            for sq in sub_quests:
+                step = sq.get("step", 0)
+                title = sq.get("title", f"Step {step}")
+                relation = sq.get("relation_to_problem", "")
+                math_content = sq.get("math_content", {})
+                key_formulas = sq.get("key_formulas", [])
+                
+                # Build context for this step
+                formulas_text = "\n".join([
+                    f"- {f.get('name', '')}: {f.get('latex', '')} ({f.get('description', '')})"
+                    for f in key_formulas
+                ])
+                
+                prompt = f"""Step {step}: {title}
+Relation to problem: {relation}
+Definition: {math_content.get('definition', '')}
+Theorem: {math_content.get('theorem', '')}
+Key Formulas:
+{formulas_text}
+
+Explain how this step contributes to solving the overall problem. Include:
+1. What mathematical concept is being used
+2. How to apply the formula with a concrete example
+3. How this connects to the next step or final solution
+
+Use LaTeX notation (with $...$ for inline and $$...$$ for display math) for formulas. Keep it concise (3-5 sentences)."""
+
+                response = client.chat.completions.create(
+                    model=AI_MODEL,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are a math tutor explaining step-by-step how to solve a problem. Use LaTeX notation for formulas. Be concise but thorough."
+                        },
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=500,
+                    temperature=0.3
+                )
+                
+                reasoning = response.choices[0].message.content or ""
+                step_data = {
+                    "step": step,
+                    "title": title,
+                    "reasoning": reasoning
+                }
+                all_steps.append(step_data)
+                
+                # Stream this step
+                yield f"data: {json.dumps({'type': 'step', 'data': step_data})}\n\n"
+            
+            # Generate final summary connecting all steps
+            steps_summary = "\n".join([
+                f"Step {s['step']}: {s['title']} - {s['reasoning'][:100]}..."
+                for s in all_steps
+            ])
+            
+            summary_response = client.chat.completions.create(
+                model=AI_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a math tutor providing a concise summary of how all steps connect to solve the problem. Use LaTeX for formulas."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Summarize how these steps work together to solve the problem:\n{steps_summary}\n\nProvide a 2-3 sentence summary connecting all concepts."
+                    }
+                ],
+                max_tokens=200,
+                temperature=0.3
+            )
+            
+            summary = summary_response.choices[0].message.content or ""
+            yield f"data: {json.dumps({'type': 'summary', 'data': summary})}\n\n"
+            
+            # Save to database
+            reasoning_data = {"steps": all_steps, "summary": summary}
+            db = SessionLocal()
+            try:
+                new_reasoning = QuestReasoning(
+                    problem_id=problem_id,
+                    reasoning_data=json.dumps(reasoning_data),
+                    created_by=user_id
+                )
+                db.add(new_reasoning)
+                db.commit()
+            finally:
+                db.close()
+            
+            yield f"data: {json.dumps({'type': 'done', 'cached': False})}\n\n"
+            
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+    
+    return StreamingResponse(generate_stream(), media_type="text/event-stream")

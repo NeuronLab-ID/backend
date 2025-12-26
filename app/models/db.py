@@ -98,3 +98,12 @@ class Problem(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class QuestReasoning(Base):
+    """Cached AI-generated reasoning for quest problems."""
+    __tablename__ = "quest_reasonings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    problem_id = Column(Integer, unique=True, index=True, nullable=False)
+    reasoning_data = Column(Text, nullable=False)  # JSON: {steps: [{step, title, reasoning}], summary}
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(Integer, nullable=True)  # User ID who first generated it
