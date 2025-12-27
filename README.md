@@ -55,11 +55,51 @@ cp .env.example .env
 Create a `.env` file with:
 
 ```env
+# Core Configuration
 SECRET_KEY=your-secret-key-here
-OPENAI_API_KEY=your-openai-api-key
 DATABASE_URL=sqlite:///./deepml.db
 PROBLEMS_DIR=d:/PythonProject/deepml/problems
 QUESTS_DIR=d:/PythonProject/deepml/quests
+
+# AI Backend Configuration
+# Options: "openai", "github", "copilot"
+AI_BACKEND=openai
+
+# Model for OpenAI/GitHub backends
+AI_MODEL=gpt-4o-mini
+
+# OpenAI API Key (required for AI_BACKEND=openai)
+OPENAI_API_KEY=your-openai-api-key
+
+# Copilot CLI Model (for AI_BACKEND=copilot)
+# Available: gpt-5.1, gpt-5, gpt-4.1, claude-sonnet-4, gemini-3-pro-preview
+COPILOT_MODEL=gpt-4.1
+```
+
+### AI Backend Options
+
+| Backend | Description | Requirements |
+|---------|-------------|--------------|
+| `openai` | OpenAI API (GPT-4o-mini default) | `OPENAI_API_KEY` in `.env` |
+| `github` | GitHub Models API (free) | `gh auth login` |
+| `copilot` | GitHub Copilot CLI | Install: `copilot` CLI from GitHub |
+
+**GitHub Backend Setup:**
+```bash
+# Install GitHub CLI
+winget install GitHub.cli
+
+# Authenticate
+gh auth login
+```
+
+**Copilot CLI Setup:**
+```bash
+# Install Copilot CLI (requires Copilot subscription)
+# Download from https://githubnext.com/projects/copilot-cli
+
+# Verify installation
+copilot -v
 ```
 
 ### Database Setup
