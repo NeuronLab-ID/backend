@@ -2,6 +2,14 @@
 NeuronLab Backend - FastAPI Application
 Based on Deep-ML (https://deep-ml.com)
 """
+# Load .env FIRST before any other imports
+from dotenv import load_dotenv
+load_dotenv()
+
+# Initialize logging
+from app.logging_config import setup_logger
+setup_logger()
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -45,4 +53,17 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    import os
+    
+    # For development: single worker with reload
+    # For production: multiple workers (set WORKERS env var)
+    workers = int(os.getenv("WORKERS", "1"))
+    reload_mode = os.getenv("RELOAD", "true").lower() == "true"
+    
+    if reload_mode:
+        # Development mode: single worker with hot reload
+        uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    else:
+        # Production mode: multiple workers for concurrent requests
+        uvicorn.run("main:app", host="0.0.0.0", port=8000, workers=workers)
+
