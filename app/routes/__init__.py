@@ -9,6 +9,7 @@ from app.routes.quests import router as quests_router
 from app.routes.hints import router as hints_router
 from app.routes.users import router as users_router
 from app.routes.math_samples import router as math_samples_router
+from app.routes.cookies import router as cookies_router
 
 # Aggregate all routers
 api_router = APIRouter()
@@ -20,4 +21,5 @@ api_router.include_router(quests_router, tags=["quests"])
 api_router.include_router(hints_router, tags=["hints"])
 api_router.include_router(users_router, prefix="/user", tags=["users"])
 api_router.include_router(math_samples_router, tags=["math"])
+api_router.include_router(cookies_router, tags=["cookies"])
 

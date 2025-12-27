@@ -12,6 +12,9 @@ from app.routes.auth import get_current_user
 from app.models.db import Quest, QuestProgress, QuestReasoning
 from app.models.schemas import QuestExecuteRequest, QuestCreateRequest, QuestProgressSaveRequest, QuestReasoningRequest
 from app.services.executor import execute_code
+from app.services import get_provider, get_search_provider, get_reasoning_provider
+from app.services.hint_generator import AI_BACKEND  # For backward compatibility
+
 
 router = APIRouter()
 
@@ -285,14 +288,14 @@ async def get_full_reasoning(problem_id: int, user_id: int = Depends(get_current
 
 
 @router.get("/quest/full-reasoning/{problem_id}/stream")
-async def stream_full_reasoning(problem_id: int, force: bool = False, user_id: int = Depends(get_current_user)):
+async def stream_full_reasoning(problem_id: int, force: bool = False, usePerplexity: bool = False, usePerplexityReasoning: bool = False, user_id: int = Depends(get_current_user)):
     """Generate and stream full reasoning for all quest steps using SSE.
     
     Args:
         force: If True, delete existing cached reasoning and regenerate fresh.
+        usePerplexity: If True, use Perplexity API to search for web references.
+        usePerplexityReasoning: If True, use Perplexity with Claude 4.5 Sonnet Thinking for reasoning generation.
     """
-    from app.services.hint_generator import create_client, AI_MODEL
-    
     db = SessionLocal()
     try:
         # Check for cached reasoning first
@@ -336,11 +339,46 @@ async def stream_full_reasoning(problem_id: int, force: bool = False, user_id: i
     
     async def generate_stream():
         try:
-            client = create_client()
+            # Get providers using factory
+            reasoning_provider = get_reasoning_provider(use_perplexity=usePerplexityReasoning)
+            search_provider = get_search_provider() if usePerplexity else None
+            
             all_steps = []
             previous_context = ""  # Accumulated context from previous steps
             
-            # Generate reasoning for each step
+            # ========================================
+            # STEP 0: Single Perplexity search for ALL steps (coherent context)
+            # ========================================
+            web_references = ""
+            if search_provider:
+                # Build comprehensive search query covering all steps
+                all_titles = [sq.get("title", f"Step {sq.get('step', 0)}") for sq in sub_quests]
+                all_relations = [sq.get("relation_to_problem", "") for sq in sub_quests if sq.get("relation_to_problem")]
+                main_topic = quest_data.get("title", "") or quest_data.get("problem_title", "") or all_titles[0]
+                
+                # Create a unified search covering the entire problem
+                search_topic = f"{main_topic}: {', '.join(all_titles[:3])}"
+                search_context = f"""This is a multi-step problem covering:
+{chr(10).join([f"- Step {i+1}: {t}" for i, t in enumerate(all_titles)])}
+
+Main concepts: {', '.join(list(set(all_relations))[:3]) if all_relations else main_topic}"""
+                
+                yield f"data: {json.dumps({'type': 'search', 'data': {'step': 0, 'topic': f'Searching: {search_topic[:50]}...'}})}\\n\\n"
+                
+                search_result = await search_provider.search(search_topic, search_context)
+                if search_result:
+                    web_references = f"""
+### 📚 Web References (from Perplexity) - USE THIS DATA FOR ALL STEPS:
+{search_result[:3000]}
+
+**IMPORTANT**: Use the SAME real-world example dataset above for ALL steps below.
+Each step should build on the previous step's results using this consistent dataset.
+"""
+                    yield f"data: {json.dumps({'type': 'search_complete', 'data': {'chars': len(search_result)}})}\\n\\n"
+            
+            # ========================================
+            # STEPS 1-N: Generate reasoning for each step using same context
+            # ========================================
             for sq in sub_quests:
                 step = sq.get("step", 0)
                 title = sq.get("title", f"Step {step}")
@@ -365,14 +403,16 @@ async def stream_full_reasoning(problem_id: int, force: bool = False, user_id: i
                 context_section = ""
                 if previous_context:
                     context_section = f"""
-### Previous Steps Summary (USE THESE RESULTS):
+### Previous Steps Summary (USE THESE RESULTS - CONTINUE THE CALCULATION):
 {previous_context}
 
-**IMPORTANT**: Build upon the previous steps' results. Reference the computed values and continue the calculation flow.
+**CRITICAL**: You MUST use the computed values from previous steps. Continue the calculation chain.
 """
                 
+
                 prompt = f"""Step {step} of {len(sub_quests)}: {title}
 {context_section}
+{web_references}
 Relation to main problem: {relation}
 Definition: {math_content.get('definition', '')}
 Key Formulas:
@@ -388,6 +428,9 @@ Now, explain this step by:
 2. **Formula Application**: Show the formula and explain each variable
 3. **Step-by-Step Computation**: Using the example input above, compute the result step-by-step:
    - Parse the input data
+   - **IMPORTANT**: When showing example data, use REAL-WORLD descriptive values instead of abstract ones.
+     For example, instead of {{'A': 'x', 'B': '1'}}, use something like:
+     {{'Weather': 'Sunny', 'Play': 'Yes'}}, {{'Age': 25, 'Income': 'High'}}, or {{'Size': 'Large', 'Color': 'Red'}}
    - Apply the formula with actual numbers from the input
    - Show intermediate calculations
    - Arrive at the expected output
@@ -396,23 +439,32 @@ Now, explain this step by:
 
 Use LaTeX notation ($...$ for inline, $$...$$ for display math). Be thorough in the computation."""
 
-                response = client.chat.completions.create(
-                    model=AI_MODEL,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": """You are a math tutor explaining how to solve coding problems step-by-step. 
-When given a test case, compute it mathematically showing all intermediate steps and calculations.
-IMPORTANT: If previous steps are provided, you MUST reference their computed results and continue the calculation chain.
-Use LaTeX for formulas. Be detailed and thorough."""
-                        },
-                        {"role": "user", "content": prompt}
-                    ],
-                    max_tokens=3000,
-                    temperature=0.3
-                )
-                
-                reasoning = response.choices[0].message.content or ""
+                system_prompt = f"""You are a math computation specialist performing Step {step} of {len(sub_quests)}.
+
+SEQUENTIAL COMPUTATION RULES:
+- This is Step {step} of a {len(sub_quests)}-step sequential calculation
+- If web references provided a real-world dataset (e.g., Weather/Tennis), use that SAME dataset
+- If previous steps computed values, you MUST use those exact values - do NOT recompute from scratch
+- Your output feeds into the next step, so state your final result clearly
+
+ROLE SEPARATION:
+- Web references contain: formulas, definitions, and real-world example data
+- YOUR JOB: Take those formulas and compute exact numerical results step-by-step
+
+COMPUTATION GUIDELINES:
+1. Use the EXACT formulas from web references (if available)
+2. Use the SAME real-world sample data throughout all steps (e.g., Weather=Sunny, Play=Yes)
+3. Show ALL intermediate calculations with actual numbers
+4. Use LaTeX for formulas ($...$ inline, $$...$$ display)
+5. Reference previous step results by their exact computed values
+6. End with a clear "**Result for Step {step}:**" statement
+
+DO NOT explain theory - just COMPUTE using the consistent dataset."""
+
+                # Generate reasoning using the selected provider
+                reasoning = await reasoning_provider.generate_reasoning(prompt, system_prompt)
+                if reasoning is None:
+                    reasoning = f"[Error generating reasoning for step {step}]"
                 step_data = {
                     "step": step,
                     "title": title,
@@ -438,23 +490,13 @@ Use LaTeX for formulas. Be detailed and thorough."""
                 for s in all_steps
             ])
             
-            summary_response = client.chat.completions.create(
-                model=AI_MODEL,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a math tutor providing a concise summary of how all steps connect to solve the problem. Use LaTeX for formulas."
-                    },
-                    {
-                        "role": "user",
-                        "content": f"Summarize how these steps work together to solve the problem:\n{steps_summary}\n\nProvide a 2-3 sentence summary connecting all concepts."
-                    }
-                ],
-                max_tokens=1000,
-                temperature=0.3
-            )
+            summary_system_prompt = "You are a math tutor providing a concise summary of how all steps connect to solve the problem. Use LaTeX for formulas."
+            summary_user_prompt = f"Summarize how these steps work together to solve the problem:\n{steps_summary}\n\nProvide a 2-3 sentence summary connecting all concepts."
             
-            summary = summary_response.choices[0].message.content or ""
+            # Generate summary using the selected provider
+            summary = await reasoning_provider.generate_reasoning(summary_user_prompt, summary_system_prompt)
+            if summary is None:
+                summary = "[Error generating summary]"
             yield f"data: {json.dumps({'type': 'summary', 'data': summary})}\n\n"
             
             # Save to database
