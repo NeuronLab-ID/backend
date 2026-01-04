@@ -10,10 +10,10 @@ from app.config import LOCAL_DEV
 from app.database import SessionLocal
 from app.routes.auth import get_current_user
 from app.models.db import Quest, QuestProgress, QuestReasoning
-from app.models.schemas import QuestExecuteRequest, QuestCreateRequest, QuestProgressSaveRequest, QuestReasoningRequest
+from app.models.schemas import QuestExecuteRequest, QuestCreateRequest, QuestProgressSaveRequest, QuestReasoningRequest, FixMermaidRequest
 from app.services.executor import execute_code
 from app.services import get_provider, get_search_provider, get_reasoning_provider
-from app.services.hint_generator import AI_BACKEND  # For backward compatibility
+from app.services.hint_generator import AI_BACKEND, create_client, AI_MODEL  # For backward compatibility
 
 
 router = APIRouter()
@@ -312,6 +312,11 @@ async def stream_full_reasoning(problem_id: int, force: bool = False, usePerplex
             cached_data = json.loads(existing.reasoning_data)
             
             async def stream_cached():
+                # Emit web references first if available (for images)
+                if cached_data.get("web_references"):
+                    yield f"data: {json.dumps({'type': 'search_result', 'data': {'content': cached_data['web_references']}})}\n\n"
+                    yield f"data: {json.dumps({'type': 'search_complete', 'data': {'chars': len(cached_data['web_references'])}})}\n\n"
+                
                 for step_data in cached_data.get("steps", []):
                     yield f"data: {json.dumps({'type': 'step', 'data': step_data})}\n\n"
                     await asyncio.sleep(0.1)  # Small delay for UI
@@ -363,18 +368,22 @@ async def stream_full_reasoning(problem_id: int, force: bool = False, usePerplex
 
 Main concepts: {', '.join(list(set(all_relations))[:3]) if all_relations else main_topic}"""
                 
-                yield f"data: {json.dumps({'type': 'search', 'data': {'step': 0, 'topic': f'Searching: {search_topic[:50]}...'}})}\\n\\n"
+                yield f"data: {json.dumps({'type': 'search', 'data': {'step': 0, 'topic': f'Searching: {search_topic[:50]}...'}})}\n\n"
                 
                 search_result = await search_provider.search(search_topic, search_context)
                 if search_result:
+                    # Send full search result to frontend (includes images)
+                    yield f"data: {json.dumps({'type': 'search_result', 'data': {'content': search_result}})}\n\n"
+                    
+                    # Use truncated version for reasoning context (increased from 3000 to 8000)
                     web_references = f"""
 ### 📚 Web References (from Perplexity) - USE THIS DATA FOR ALL STEPS:
-{search_result[:3000]}
+{search_result}
 
 **IMPORTANT**: Use the SAME real-world example dataset above for ALL steps below.
 Each step should build on the previous step's results using this consistent dataset.
 """
-                    yield f"data: {json.dumps({'type': 'search_complete', 'data': {'chars': len(search_result)}})}\\n\\n"
+                    yield f"data: {json.dumps({'type': 'search_complete', 'data': {'chars': len(search_result)}})}\n\n"
             
             # ========================================
             # STEPS 1-N: Generate reasoning for each step using same context
@@ -423,43 +432,77 @@ Example Test Case:
 - Input: {example_input}
 - Expected Output: {example_output}
 
-Now, explain this step by:
-1. **Concept**: What mathematical concept is being used in this step
-2. **Formula Application**: Show the formula and explain each variable
-3. **Step-by-Step Computation**: Using the example input above, compute the result step-by-step:
-   - Parse the input data
-   - **IMPORTANT**: When showing example data, use REAL-WORLD descriptive values instead of abstract ones.
-     For example, instead of {{'A': 'x', 'B': '1'}}, use something like:
-     {{'Weather': 'Sunny', 'Play': 'Yes'}}, {{'Age': 25, 'Income': 'High'}}, or {{'Size': 'Large', 'Color': 'Red'}}
-   - Apply the formula with actual numbers from the input
-   - Show intermediate calculations
-   - Arrive at the expected output
-4. **Key Result**: State the computed value clearly (this will be used in the next step)
-5. **Connection to Next Step**: How this result feeds into the next step
+Now, explain this step with VISUAL AIDS for visual learners:
 
-Use LaTeX notation ($...$ for inline, $$...$$ for display math). Be thorough in the computation."""
+1. **Concept Overview**: What mathematical concept is being used (include a Mermaid flowchart if helpful)
 
-                system_prompt = f"""You are a math computation specialist performing Step {step} of {len(sub_quests)}.
+2. **Visual Data Table**: Display the example data in a MARKDOWN TABLE:
+   | Feature | Value 1 | Value 2 | ... |
+   |---------|---------|---------|-----|
+   Use REAL-WORLD descriptive values (e.g., Weather=Sunny, Play=Yes)
+
+3. **Formula Application**: Show the formula with a visual breakdown:
+   - Display the formula in LaTeX ($$...$$)
+   - Create a Mermaid diagram showing data flow if applicable:
+     ```mermaid
+     graph LR
+       A[Input] --> B[Process] --> C[Output]
+     ```
+
+4. **Step-by-Step Computation**: Show calculations in an organized way:
+   - Use TABLES for intermediate results when appropriate
+   - Show each calculation step clearly
+   - Use $$...$$ for important formulas
+
+5. **Visual Summary**: Include ONE of these visual aids:
+   - **Mermaid Flowchart**: For algorithm steps
+   - **Markdown Table**: For data transformations
+   - **Tree Diagram** (using mermaid): For hierarchical data
+
+6. **Key Result**: State the computed value clearly in a highlighted box
+7. **Connection to Next Step**: How this result feeds into the next step
+
+VISUAL REQUIREMENTS:
+- Include at least ONE markdown table showing data
+- Include at least ONE mermaid diagram (flowchart, graph, or tree)
+- Use LaTeX notation ($...$ for inline, $$...$$ for display math)
+- Make it easy to follow visually"""
+
+                system_prompt = f"""You are a VISUAL LEARNING specialist performing Step {step} of {len(sub_quests)}.
+
+YOU MUST INCLUDE VISUAL AIDS:
+1. **Markdown Tables**: Show data in tabular format
+2. **Mermaid Diagrams**: Include flowcharts, graphs, or trees
+3. **LaTeX Formulas**: Use $$...$$ for display math
+
+MERMAID EXAMPLES YOU CAN USE:
+```mermaid
+graph TD
+    A[Start] --> B{{Decision}}
+    B -->|Yes| C[Action 1]
+    B -->|No| D[Action 2]
+```
+
+```mermaid
+graph LR
+    Input --> Process --> Output
+```
 
 SEQUENTIAL COMPUTATION RULES:
 - This is Step {step} of a {len(sub_quests)}-step sequential calculation
 - If web references provided a real-world dataset (e.g., Weather/Tennis), use that SAME dataset
-- If previous steps computed values, you MUST use those exact values - do NOT recompute from scratch
+- If previous steps computed values, you MUST use those exact values
 - Your output feeds into the next step, so state your final result clearly
 
-ROLE SEPARATION:
-- Web references contain: formulas, definitions, and real-world example data
-- YOUR JOB: Take those formulas and compute exact numerical results step-by-step
+VISUAL OUTPUT REQUIREMENTS:
+1. Start with a brief concept overview
+2. Show data in a MARKDOWN TABLE (required)
+3. Include a MERMAID DIAGRAM showing the algorithm/data flow (required)
+4. Use LaTeX for all formulas ($...$ inline, $$...$$ display)
+5. Show step-by-step calculations with intermediate tables
+6. End with a clear visual summary and "**Result for Step {step}:**"
 
-COMPUTATION GUIDELINES:
-1. Use the EXACT formulas from web references (if available)
-2. Use the SAME real-world sample data throughout all steps (e.g., Weather=Sunny, Play=Yes)
-3. Show ALL intermediate calculations with actual numbers
-4. Use LaTeX for formulas ($...$ inline, $$...$$ display)
-5. Reference previous step results by their exact computed values
-6. End with a clear "**Result for Step {step}:**" statement
-
-DO NOT explain theory - just COMPUTE using the consistent dataset."""
+IMPORTANT: Make the explanation VISUAL and easy to scan. Use diagrams and tables extensively."""
 
                 # Generate reasoning using the selected provider
                 reasoning = await reasoning_provider.generate_reasoning(prompt, system_prompt)
@@ -499,8 +542,8 @@ DO NOT explain theory - just COMPUTE using the consistent dataset."""
                 summary = "[Error generating summary]"
             yield f"data: {json.dumps({'type': 'summary', 'data': summary})}\n\n"
             
-            # Save to database
-            reasoning_data = {"steps": all_steps, "summary": summary}
+            # Save to database (include web_references for images)
+            reasoning_data = {"steps": all_steps, "summary": summary, "web_references": web_references}
             db = SessionLocal()
             try:
                 new_reasoning = QuestReasoning(
@@ -519,3 +562,508 @@ DO NOT explain theory - just COMPUTE using the consistent dataset."""
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
     
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
+
+
+@router.post("/fix-mermaid")
+async def fix_mermaid_code(request: FixMermaidRequest, user_id: int = Depends(get_current_user)):
+    """Use AI to fix invalid Mermaid diagram code."""
+    try:
+        client = create_client()
+        
+        response = client.chat.completions.create(
+            model=AI_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": """You are a Mermaid diagram syntax expert. Fix the provided Mermaid diagram code.
+
+Common issues to fix:
+1. Newlines inside node labels - use <br/> instead or put on single line
+2. Unicode subscripts (like ₁, ₂) - replace with regular text
+3. Unquoted special characters in labels - add quotes around labels with special chars
+4. Missing quotes around labels with spaces/special characters
+5. Invalid node IDs - ensure IDs are alphanumeric with underscores only
+6. Syntax errors in edges or subgraphs
+
+Return ONLY the fixed Mermaid code, nothing else. No explanation, no markdown code blocks."""
+                },
+                {
+                    "role": "user",
+                    "content": f"""Fix this Mermaid diagram. Error: {request.error}
+
+Original code:
+{request.code}
+
+Return only the fixed Mermaid code:"""
+                }
+            ],
+            max_tokens=2000,
+            temperature=0.1
+        )
+        
+        fixed_code = response.choices[0].message.content or request.code
+        
+        # Clean up the response (remove markdown code blocks if present)
+        fixed_code = fixed_code.strip()
+        if fixed_code.startswith("```"):
+            lines = fixed_code.split("\n")
+            fixed_code = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
+        
+        return {"fixed_code": fixed_code}
+        
+    except Exception as e:
+        # Return original code on error
+        return {"fixed_code": request.code, "error": str(e)}
+
+
+@router.post("/quest/export-markdown/{problem_id}")
+async def export_reasoning_markdown(problem_id: int, use_ai: bool = False, force: bool = False, user_id: int = Depends(get_current_user)):
+    """
+    Export reasoning as formatted markdown.
+    
+    Args:
+        problem_id: Problem ID
+        use_ai: If True, use Perplexity AI to enhance formatting with proper LaTeX
+        force: If True, regenerate even if cached version exists
+    """
+    from app.models.db import Problem, ReasoningExport
+    
+    db = SessionLocal()
+    try:
+        # Check for cached export first (if use_ai and not force)
+        if use_ai and not force:
+            cached_export = db.query(ReasoningExport).filter(
+                ReasoningExport.problem_id == problem_id,
+                ReasoningExport.export_type == 'markdown'
+            ).first()
+            
+            if cached_export:
+                return {"markdown": cached_export.content, "enhanced": True, "cached": True}
+        
+        # Get cached reasoning
+        reasoning = db.query(QuestReasoning).filter(
+            QuestReasoning.problem_id == problem_id
+        ).first()
+        
+        if not reasoning:
+            raise HTTPException(404, "No reasoning found for this problem. Generate reasoning first.")
+        
+        reasoning_data = json.loads(reasoning.reasoning_data)
+        steps = reasoning_data.get("steps", [])
+        summary = reasoning_data.get("summary", "")
+        web_references = reasoning_data.get("web_references", "")
+        
+        # Get problem title
+        problem = db.query(Problem).filter(Problem.id == problem_id).first()
+        problem_name = problem.title if problem else f"Problem {problem_id}"
+        
+    finally:
+        db.close()
+    
+    # Convert LaTeX delimiters for Google Docs compatibility
+    def convert_latex(text: str) -> str:
+        import re
+        # Convert \(...\) to $...$
+        result = re.sub(r'\\\((.+?)\\\)', r'$\1$', text, flags=re.DOTALL)
+        # Convert \[...\] to $$...$$
+        result = re.sub(r'\\\[(.+?)\\\]', r'$$\1$$', result, flags=re.DOTALL)
+        return result
+    
+    if use_ai:
+        # Use Perplexity AI to enhance formatting
+        try:
+            search_provider = get_search_provider()
+            if not search_provider or not search_provider.is_configured():
+                raise HTTPException(503, "Perplexity AI is not configured. Using quick export.")
+            
+            # Format all steps for AI enhancement
+            steps_text = "\n\n".join([
+                f"## Step {s['step']}: {s['title']}\n{s['reasoning']}"
+                for s in steps
+            ])
+            
+            enhance_prompt = f"""Reformat this mathematical solution reasoning for Google Docs compatibility.
+
+REQUIREMENTS:
+1. Use $...$ for inline math (e.g., $x = 5$)
+2. Use $$...$$ for display math on separate lines (e.g., $$\\frac{{a}}{{b}}$$)
+3. Clean up any LaTeX syntax errors
+4. Ensure all mathematical expressions are properly formatted
+5. Keep all content but improve readability
+6. Format tables properly using markdown syntax
+
+CONTENT TO REFORMAT:
+{steps_text}
+
+SUMMARY:
+{summary}
+
+Return the reformatted content maintaining the same structure (## Step N: Title format)."""
+
+            enhanced = await search_provider.search(enhance_prompt, "Format mathematical content for Google Docs with LaTeX")
+            
+            if enhanced:
+                # Parse enhanced content back into steps
+                from datetime import datetime
+                current_date = datetime.now().strftime("%B %d, %Y")
+                
+                markdown = f"# {problem_name} - Solution Reasoning\n\n"
+                markdown += f"> Generated by NeuronLab AI (Enhanced) | {current_date}\n"
+                markdown += "> Open in Google Docs with Auto-LaTeX Equations add-on for best experience\n\n"
+                markdown += convert_latex(enhanced)
+                
+                if web_references:
+                    markdown += "\n\n---\n\n## References\n\n"
+                    markdown += convert_latex(web_references)
+                
+                # Save to database
+                db = SessionLocal()
+                try:
+                    # Delete existing if force regenerate
+                    existing = db.query(ReasoningExport).filter(
+                        ReasoningExport.problem_id == problem_id,
+                        ReasoningExport.export_type == 'markdown'
+                    ).first()
+                    if existing:
+                        db.delete(existing)
+                    
+                    new_export = ReasoningExport(
+                        problem_id=problem_id,
+                        export_type='markdown',
+                        content=markdown,
+                        ai_model='pplx_alpha',
+                        created_by=user_id
+                    )
+                    db.add(new_export)
+                    db.commit()
+                finally:
+                    db.close()
+                
+                return {"markdown": markdown, "enhanced": True, "cached": False}
+                
+        except Exception as e:
+            # Fall back to quick export on error
+            pass
+    
+    # Quick export (no AI)
+    from datetime import datetime
+    current_date = datetime.now().strftime("%B %d, %Y")
+    
+    markdown = f"# {problem_name} - Solution Reasoning\n\n"
+    markdown += f"> Generated by NeuronLab AI | {current_date}\n"
+    markdown += "> Open in Google Docs with Auto-LaTeX Equations add-on for best experience\n\n"
+    
+    for step in steps:
+        markdown += f"## Step {step['step']}: {step['title']}\n\n"
+        markdown += convert_latex(step['reasoning']) + "\n\n"
+    
+    if summary:
+        markdown += "---\n\n## Summary\n\n"
+        markdown += convert_latex(summary) + "\n\n"
+    
+    if web_references:
+        markdown += "---\n\n## References\n\n"
+        markdown += convert_latex(web_references) + "\n"
+    
+    return {"markdown": markdown, "enhanced": False}
+
+
+@router.post("/quest/export-latex/{problem_id}")
+async def export_reasoning_latex(problem_id: int, useSonnet: bool = False, force: bool = False, user_id: int = Depends(get_current_user)):
+    """
+    Export reasoning as valid LaTeX (.tex) document using AI.
+    
+    Args:
+        useSonnet: If True, use Claude 4.5 Sonnet + Web Search for enhanced LaTeX generation
+                   with web-validated syntax. Slower but more accurate.
+        force: If True, regenerate even if cached version exists
+    
+    Uses Perplexity AI to ensure valid pdfLaTeX syntax - prevents compilation errors.
+    """
+    from app.models.db import Problem, ReasoningExport
+    
+    export_type = 'latex_sonnet' if useSonnet else 'latex'
+    
+    db = SessionLocal()
+    try:
+        # Check for cached export first (if not force)
+        if not force:
+            cached_export = db.query(ReasoningExport).filter(
+                ReasoningExport.problem_id == problem_id,
+                ReasoningExport.export_type == export_type
+            ).first()
+            
+            if cached_export:
+                return {"latex": cached_export.content, "ai_generated": True, "model": cached_export.ai_model, "cached": True}
+        
+        # Get cached reasoning
+        reasoning = db.query(QuestReasoning).filter(
+            QuestReasoning.problem_id == problem_id
+        ).first()
+        
+        if not reasoning:
+            raise HTTPException(404, "No reasoning found for this problem. Generate reasoning first.")
+        
+        reasoning_data = json.loads(reasoning.reasoning_data)
+        steps = reasoning_data.get("steps", [])
+        summary = reasoning_data.get("summary", "")
+        
+        # Get problem title
+        problem = db.query(Problem).filter(Problem.id == problem_id).first()
+        problem_name = problem.title if problem else f"Problem {problem_id}"
+        
+    finally:
+        db.close()
+    
+    from datetime import datetime
+    current_date = datetime.now().strftime("%B %d, %Y")
+    
+    # Build content for AI to convert
+    raw_content = ""
+    for step in steps:
+        raw_content += f"## Step {step['step']}: {step['title']}\n\n{step['reasoning']}\n\n"
+    
+    if summary:
+        raw_content += f"## Summary\n\n{summary}\n\n"
+    
+    # Use AI to generate valid LaTeX
+    try:
+        if useSonnet:
+            # Use Claude 4.5 Sonnet with web search - higher quality, slower
+            reasoning_provider = get_reasoning_provider(use_perplexity=True)
+            if reasoning_provider and reasoning_provider.is_configured():
+                sonnet_prompt = f"""You are a LaTeX expert. Convert this mathematical reasoning into a VALID pdfLaTeX document.
+
+IMPORTANT: Search the web to verify LaTeX syntax for any complex mathematical notation.
+- Search for correct LaTeX syntax for matrices, integrals, summations, fractions
+- Search for proper package requirements for special symbols
+- Validate that all environments (equation, align, lstlisting) are correctly used
+
+CRITICAL OUTPUT REQUIREMENTS:
+1. Output ONLY valid LaTeX code - no markdown wrappers, no explanations
+2. Start with \\documentclass{{article}}
+3. Include packages: amsmath, amssymb, amsthm, hyperref, listings, graphicx, xcolor, geometry, booktabs
+4. ESCAPE all special characters: & → \\&, % → \\%, # → \\#, _ → \\_
+5. Use \\section{{}} for headers, \\textbf{{}} for bold, \\textit{{}} for italic
+6. Math: \\( \\) for inline, \\[ \\] or $$ for display equations
+7. Code blocks: \\begin{{lstlisting}} ... \\end{{lstlisting}}
+8. Tables: Use tabular with proper column specs
+9. NO undefined control sequences - verify each LaTeX command exists
+10. Must compile in pdfLaTeX without errors
+
+DOCUMENT METADATA:
+- Title: {problem_name} - Solution Reasoning  
+- Author: Generated by NeuronLab AI (Sonnet Enhanced)
+- Date: {current_date}
+
+CONTENT TO CONVERT:
+{raw_content}
+
+Output the complete, compilable .tex file:"""
+
+                sonnet_system = """You are a LaTeX documentation expert. Your task is to produce ONLY valid, compilable pdfLaTeX code.
+Search the web to verify any LaTeX syntax you are unsure about. Common issues to avoid:
+- Missing package declarations for special symbols
+- Unescaped special characters (&, %, #, _, {, })
+- Mismatched braces or environments
+- Invalid math mode syntax"""
+
+                latex_result = await reasoning_provider.generate_reasoning(sonnet_prompt, sonnet_system)
+                
+                if latex_result:
+                    latex = latex_result.strip()
+                    # Clean markdown wrappers if present
+                    if latex.startswith("```"):
+                        lines = latex.split("\n")
+                        latex = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+                    
+                    # Ensure proper document structure
+                    if not latex.strip().startswith("\\documentclass"):
+                        latex = f"""\\documentclass[11pt,a4paper]{{article}}
+\\usepackage[utf8]{{inputenc}}
+\\usepackage[T1]{{fontenc}}
+\\usepackage{{amsmath,amssymb,amsthm}}
+\\usepackage{{graphicx}}
+\\usepackage{{hyperref}}
+\\usepackage{{listings}}
+\\usepackage{{xcolor}}
+\\usepackage{{geometry}}
+\\usepackage{{booktabs}}
+\\geometry{{margin=1in}}
+\\lstset{{basicstyle=\\ttfamily\\small,breaklines=true,frame=single,backgroundcolor=\\color{{gray!10}}}}
+\\title{{{problem_name.replace('#', '').replace('$', '').replace('%', '').replace('&', 'and').replace('_', ' ')} -- Solution Reasoning}}
+\\author{{Generated by NeuronLab AI (Sonnet Enhanced)}}
+\\date{{{current_date}}}
+\\begin{{document}}
+\\maketitle
+
+{latex}"""
+                    
+                    if "\\end{document}" not in latex:
+                        latex += "\n\\end{document}\n"
+                    
+                    # Save to database
+                    db = SessionLocal()
+                    try:
+                        existing = db.query(ReasoningExport).filter(
+                            ReasoningExport.problem_id == problem_id,
+                            ReasoningExport.export_type == 'latex_sonnet'
+                        ).first()
+                        if existing:
+                            db.delete(existing)
+                        
+                        new_export = ReasoningExport(
+                            problem_id=problem_id,
+                            export_type='latex_sonnet',
+                            content=latex,
+                            ai_model='sonnet',
+                            created_by=user_id
+                        )
+                        db.add(new_export)
+                        db.commit()
+                    finally:
+                        db.close()
+                    
+                    return {"latex": latex, "ai_generated": True, "model": "sonnet", "cached": False}
+        
+        # Default: Use search provider (pplx_alpha) - faster
+        search_provider = get_search_provider()
+        if search_provider and search_provider.is_configured():
+            latex_prompt = f"""Convert the following mathematical reasoning content into a VALID pdfLaTeX document.
+
+CRITICAL REQUIREMENTS:
+1. Output ONLY the LaTeX code, no markdown, no explanation
+2. Start with \\documentclass{{article}}
+3. Include all necessary packages: amsmath, amssymb, amsthm, hyperref, listings, graphicx, xcolor, geometry
+4. Properly escape all special LaTeX characters: &, %, $, #, _, {{}}, ~, ^, \\
+5. Convert markdown headers to \\section{{}} and \\subsection{{}}
+6. Convert **bold** to \\textbf{{}} and *italic* to \\textit{{}}
+7. Convert `code` to \\texttt{{}}
+8. Ensure all math expressions use proper LaTeX: \\( \\) for inline, \\[ \\] for display
+9. Convert markdown code blocks to lstlisting environment
+10. Make sure the document compiles without errors in pdfLaTeX
+
+TITLE: {problem_name} - Solution Reasoning
+DATE: {current_date}
+AUTHOR: Generated by NeuronLab AI
+
+CONTENT TO CONVERT:
+{raw_content}
+
+Output the complete .tex file that will compile without errors:"""
+
+            latex_result = await search_provider.search(latex_prompt, "Generate valid pdfLaTeX document")
+            
+            if latex_result:
+                # Clean up the result - extract LaTeX code if wrapped in markdown
+                latex = latex_result.strip()
+                if latex.startswith("```"):
+                    lines = latex.split("\n")
+                    # Remove first line (```latex or ```) and last line (```)
+                    latex = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+                
+                # Ensure it starts with documentclass
+                if not latex.strip().startswith("\\documentclass"):
+                    # Prepend standard preamble if AI didn't include it
+                    preamble = f"""\\documentclass[11pt,a4paper]{{article}}
+\\usepackage[utf8]{{inputenc}}
+\\usepackage[T1]{{fontenc}}
+\\usepackage{{amsmath,amssymb,amsthm}}
+\\usepackage{{graphicx}}
+\\usepackage{{hyperref}}
+\\usepackage{{listings}}
+\\usepackage{{xcolor}}
+\\usepackage{{geometry}}
+\\geometry{{margin=1in}}
+\\lstset{{basicstyle=\\ttfamily\\small,breaklines=true,frame=single,backgroundcolor=\\color{{gray!10}}}}
+\\title{{{problem_name.replace('#', '').replace('$', '').replace('%', '').replace('&', 'and').replace('_', ' ')} -- Solution Reasoning}}
+\\author{{Generated by NeuronLab AI}}
+\\date{{{current_date}}}
+\\begin{{document}}
+\\maketitle
+
+"""
+                    latex = preamble + latex
+                
+                # Ensure it ends with end document
+                if "\\end{document}" not in latex:
+                    latex += "\n\\end{document}\n"
+                
+                # Save to database
+                db = SessionLocal()
+                try:
+                    existing = db.query(ReasoningExport).filter(
+                        ReasoningExport.problem_id == problem_id,
+                        ReasoningExport.export_type == 'latex'
+                    ).first()
+                    if existing:
+                        db.delete(existing)
+                    
+                    new_export = ReasoningExport(
+                        problem_id=problem_id,
+                        export_type='latex',
+                        content=latex,
+                        ai_model='pplx_alpha',
+                        created_by=user_id
+                    )
+                    db.add(new_export)
+                    db.commit()
+                finally:
+                    db.close()
+                
+                return {"latex": latex, "ai_generated": True, "cached": False}
+    
+    except Exception as e:
+        print(f"AI LaTeX generation failed: {e}")
+    
+    # Fallback: Generate basic LaTeX without AI
+    safe_title = problem_name.replace('#', '').replace('$', '').replace('%', '').replace('&', 'and').replace('_', ' ')
+    
+    latex = f"""\\documentclass[11pt,a4paper]{{article}}
+\\usepackage[utf8]{{inputenc}}
+\\usepackage[T1]{{fontenc}}
+\\usepackage{{amsmath,amssymb,amsthm}}
+\\usepackage{{graphicx}}
+\\usepackage{{hyperref}}
+\\usepackage{{listings}}
+\\usepackage{{xcolor}}
+\\usepackage{{geometry}}
+\\geometry{{margin=1in}}
+\\lstset{{basicstyle=\\ttfamily\\small,breaklines=true,frame=single,backgroundcolor=\\color{{gray!10}}}}
+\\title{{{safe_title} -- Solution Reasoning}}
+\\author{{Generated by NeuronLab AI}}
+\\date{{{current_date}}}
+\\begin{{document}}
+\\maketitle
+
+"""
+    
+    for step in steps:
+        safe_step_title = step['title'].replace('#', '').replace('$', '').replace('%', '').replace('&', 'and').replace('_', ' ')
+        latex += f"\\section{{Step {step['step']}: {safe_step_title}}}\n\n"
+        
+        # Basic conversion of reasoning content
+        content = step['reasoning']
+        # Escape special characters (basic)
+        for char in ['&', '%', '#', '_']:
+            content = content.replace(char, '\\' + char)
+        # Convert markdown bold/italic
+        import re
+        content = re.sub(r'\*\*([^*]+)\*\*', r'\\textbf{\1}', content)
+        content = re.sub(r'\*([^*]+)\*', r'\\textit{\1}', content)
+        # Convert inline code
+        content = re.sub(r'`([^`]+)`', r'\\texttt{\1}', content)
+        
+        latex += content + "\n\n"
+    
+    if summary:
+        latex += "\\section{Summary}\n\n"
+        summary_content = summary
+        for char in ['&', '%', '#', '_']:
+            summary_content = summary_content.replace(char, '\\' + char)
+        latex += summary_content + "\n\n"
+    
+    latex += "\\end{document}\n"
+    
+    return {"latex": latex, "ai_generated": False}
+

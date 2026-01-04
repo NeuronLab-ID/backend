@@ -107,3 +107,21 @@ class QuestReasoning(Base):
     reasoning_data = Column(Text, nullable=False)  # JSON: {steps: [{step, title, reasoning}], summary}
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(Integer, nullable=True)  # User ID who first generated it
+
+
+class ReasoningExport(Base):
+    """Cached AI-generated exports (markdown/LaTeX) for reasoning."""
+    __tablename__ = "reasoning_exports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    problem_id = Column(Integer, index=True, nullable=False)
+    export_type = Column(String(20), nullable=False)  # 'markdown', 'latex', 'latex_sonnet'
+    content = Column(Text, nullable=False)  # The generated markdown or LaTeX content
+    ai_model = Column(String(50), nullable=True)  # e.g. 'pplx_alpha', 'sonnet'
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(Integer, nullable=True)  # User ID who first generated it
+    
+    # Index for querying exports by problem and type
+    __table_args__ = (
+        Index('ix_reasoning_export_problem_type', 'problem_id', 'export_type'),
+    )
