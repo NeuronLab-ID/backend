@@ -122,6 +122,12 @@ def seed_quests():
                 with open(quest_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 
+                # Extract quest metadata for logging
+                title = data.get("title", "Unknown")
+                category = data.get("category", "Unknown")
+                sub_quests = data.get("sub_quests", [])
+                num_sub_quests = len(sub_quests)
+                
                 quest = Quest(
                     problem_id=problem_id,
                     data=json.dumps(data)
@@ -131,8 +137,8 @@ def seed_quests():
                 db.commit()  # Commit each record individually
                 imported += 1
                 
-                if imported % 50 == 0:
-                    print(f"  [+] Imported {imported} quests...")
+                # Log each imported quest with details
+                print(f"  [+] #{problem_id:04d} | {category[:20]:<20} | {title[:40]:<40} | {num_sub_quests} sub-quests")
                     
             except Exception as e:
                 db.rollback()

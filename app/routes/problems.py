@@ -34,9 +34,12 @@ def decode_base64_if_needed(text: str) -> str:
 async def list_problems(
     page: int = 1, 
     limit: int = 20,
-    category: Optional[str] = Query(None, description="Filter by category")
+    category: Optional[str] = Query(None, description="Filter by category"),
+    search: Optional[str] = Query(None, description="Search by title")
 ):
     """Get list of problems with pagination (public)."""
+    from app.models.db import Quest
+    
     db = SessionLocal()
     try:
         query = db.query(Problem)
@@ -45,11 +48,21 @@ async def list_problems(
         if category:
             query = query.filter(Problem.category == category)
         
+        # Apply search filter if provided
+        if search:
+            query = query.filter(Problem.title.ilike(f"%{search}%"))
+        
         # Get total count
         total = query.count()
         
         # Apply pagination
         problems = query.order_by(Problem.id).offset((page - 1) * limit).limit(limit).all()
+        
+        # Get set of problem IDs that have quests
+        problem_ids = [p.id for p in problems]
+        quest_problem_ids = set(
+            q.problem_id for q in db.query(Quest.problem_id).filter(Quest.problem_id.in_(problem_ids)).all()
+        )
         
         return ProblemListResponse(
             problems=[
@@ -57,7 +70,8 @@ async def list_problems(
                     id=p.id,
                     title=p.title,
                     category=p.category,
-                    difficulty=p.difficulty
+                    difficulty=p.difficulty,
+                    has_quest=p.id in quest_problem_ids
                 )
                 for p in problems
             ],

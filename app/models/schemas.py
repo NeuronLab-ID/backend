@@ -38,6 +38,7 @@ class ProblemSummary(BaseModel):
     title: str
     category: str
     difficulty: str
+    has_quest: bool = False
 
 
 class ProblemListResponse(BaseModel):
@@ -137,3 +138,8 @@ class QuestReasoningRequest(BaseModel):
     test_input: str
     expected_output: str
     function_signature: str
+
+
+class FixMermaidRequest(BaseModel):
+    code: str
+    error: str

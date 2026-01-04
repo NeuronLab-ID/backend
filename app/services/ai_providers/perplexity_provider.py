@@ -219,16 +219,16 @@ Include citations for your sources."""
             "query_str": query
         }
     
-    def _parse_sse_response(self, response) -> Optional[str]:
-        """Parse SSE streaming response and extract final markdown answer.
+    def _parse_sse_response(self, response) -> tuple[Optional[str], Optional[str]]:
+        """Parse SSE streaming response and extract text + thread slug.
         
-        Perplexity's SSE format uses:
-        - blocks[].markdown_block.answer where intended_usage is 'ask_text' or 'ask_text_0_markdown'
-        - The final message has text_completed: true and final_sse_message: true
+        Returns:
+            tuple: (answer_text, thread_url_slug)
         """
         import json
         
         full_text = ""
+        thread_slug = None
         event_count = 0
         
         for line in response.iter_lines():
@@ -239,59 +239,237 @@ Include citations for your sources."""
                         data = json.loads(decoded[6:])
                         event_count += 1
                         
-                        # Check if this is the final message with text_completed
-                        text_completed = data.get("text_completed", False)
+                        # Extract thread_url_slug for later REST fetch
+                        if "thread_url_slug" in data and data["thread_url_slug"]:
+                            thread_slug = data["thread_url_slug"]
                         
-                        # Look for answer in blocks[].markdown_block
+                        # Collect answer text from markdown blocks
                         blocks = data.get("blocks", [])
                         for block in blocks:
                             intended_usage = block.get("intended_usage", "")
                             
-                            # Look for markdown blocks with the final answer
-                            # The final SSE message contains the complete answer in markdown_block.answer
-                            # We only use this and ignore diff_block patches to avoid duplicates
-                            if "ask_text" in intended_usage or intended_usage == "ask_text_0_markdown":
+                            # Look for any markdown blocks with answers
+                            if "ask_text" in intended_usage:
                                 markdown_block = block.get("markdown_block", {})
                                 if isinstance(markdown_block, dict):
                                     answer = markdown_block.get("answer", "")
-                                    # Only use if this is a longer/more complete version
                                     if answer and len(answer) > len(full_text):
                                         full_text = answer
-                                        logger.debug(f"[Perplexity] Found answer in {intended_usage}, length: {len(answer)}")
-                        
-                        # Legacy fallback: check for direct text/answer fields
-                        if not full_text:
-                            if "text" in data and isinstance(data["text"], str):
-                                full_text = data["text"]
-                            elif "answer" in data and isinstance(data["answer"], str):
-                                full_text = data["answer"]
-                                
+                                        
                     except json.JSONDecodeError:
                         continue
         
-        # Enhanced logging with detailed stats
+        logger.info(f"[Perplexity] SSE: {event_count} events, {len(full_text)} chars, slug: {bool(thread_slug)}")
+        return (full_text if full_text else None, thread_slug)
+    
+    def _fetch_thread_content(self, thread_slug: str, cookies: dict, headers: dict, timeout: int) -> Optional[dict]:
+        """Fetch complete thread data from REST API after SSE completes.
+        
+        Args:
+            thread_slug: The thread URL slug from SSE response
+            cookies: Request cookies
+            headers: Request headers
+            timeout: Request timeout
+            
+        Returns:
+            dict: Complete thread JSON response or None
+        """
+        import json
+        try:
+            from curl_cffi import requests as cffi_requests
+        except ImportError:
+            logger.error("[Perplexity] curl_cffi not installed")
+            return None
+        
+        # Build REST API URL with all supported block use cases
+        base_url = f"https://www.perplexity.ai/rest/thread/{thread_slug}"
+        params = {
+            "with_parent_info": "true",
+            "with_schematized_response": "true",
+            "version": "2.18",
+            "source": "default",
+            "limit": "10",
+            "offset": "0",
+            "from_first": "true",
+        }
+        # Add all supported block use cases
+        block_params = "&".join([f"supported_block_use_cases={b}" for b in PERPLEXITY_SUPPORTED_BLOCKS])
+        url = f"{base_url}?{'&'.join([f'{k}={v}' for k, v in params.items()])}&{block_params}"
+        
+        # Modify headers for JSON response
+        rest_headers = headers.copy()
+        rest_headers["accept"] = "application/json"
+        
+        try:
+            resp = cffi_requests.get(
+                url,
+                headers=rest_headers,
+                cookies=cookies,
+                impersonate="edge",
+                timeout=timeout
+            )
+            
+            if resp.status_code != 200:
+                logger.warning(f"[Perplexity] Thread fetch failed: HTTP {resp.status_code}")
+                return None
+            
+            data = resp.json()
+            logger.info(f"[Perplexity] Thread fetch success: {len(str(data))} bytes")
+            return data
+            
+        except Exception as e:
+            logger.warning(f"[Perplexity] Thread fetch error: {str(e)[:100]}")
+            return None
+    
+    def _parse_thread_response(self, thread_data: dict) -> Optional[str]:
+        """Parse complete thread response with inline images.
+        
+        The thread response has entries[].blocks[] with:
+        - intended_usage: 'ask_text_N_markdown' for text sections
+        - intended_usage: 'ask_text_N_images' for images linked to section N
+        
+        Images are inserted inline after their corresponding markdown sections.
+        """
+        import re
+        
+        if not thread_data:
+            return None
+        
+        entries = thread_data.get("entries", [])
+        if not entries:
+            return None
+        
+        # Use the first/latest entry
+        entry = entries[0]
+        blocks = entry.get("blocks", [])
+        
+        # Track markdown sections and their images by section number
+        markdown_sections = {}  # {section_num: text}
+        section_images = {}     # {section_num: [(url, name), ...]}
+        standalone_images = []  # Images from CODE blocks without section
+        
+        for block in blocks:
+            intended_usage = block.get("intended_usage", "")
+            
+            # Parse intended_usage to extract section number
+            section_match = re.match(r'ask_text_(\d+)_(markdown|images)', intended_usage)
+            
+            if section_match:
+                section_num = int(section_match.group(1))
+                block_type = section_match.group(2)
+                
+                if block_type == "markdown":
+                    markdown_block = block.get("markdown_block", {})
+                    if isinstance(markdown_block, dict):
+                        answer = markdown_block.get("answer", "")
+                        if answer:
+                            if section_num not in markdown_sections or len(answer) > len(markdown_sections[section_num]):
+                                markdown_sections[section_num] = answer
+                        
+                        # Check for media_items in markdown_block
+                        media_items = markdown_block.get("media_items", [])
+                        if media_items:
+                            logger.debug(f"[Perplexity] Section {section_num} markdown_block has {len(media_items)} media_items")
+                        for item in media_items:
+                            if item.get("medium") == "image":
+                                img_url = item.get("image") or item.get("url")
+                                img_name = item.get("name", "Generated Visualization")
+                                logger.info(f"[Perplexity] 📷 Section {section_num} markdown image: {img_name[:40]}... URL: {img_url[:80] if img_url else 'None'}...")
+                                if img_url:
+                                    if section_num not in section_images:
+                                        section_images[section_num] = []
+                                    if img_url not in [u for u, n in section_images[section_num]]:
+                                        section_images[section_num].append((img_url, img_name))
+                
+                elif block_type == "images":
+                    # Extract images from inline_entity_block
+                    inline_entity = block.get("inline_entity_block", {})
+                    media_block = inline_entity.get("media_block", {})
+                    media_items = media_block.get("media_items", [])
+                    
+                    if media_items:
+                        logger.debug(f"[Perplexity] Section {section_num} inline_entity_block has {len(media_items)} media_items")
+                    for item in media_items:
+                        if item.get("medium") == "image":
+                            img_url = item.get("image") or item.get("url")
+                            img_name = item.get("name", "Code Interpreter Output")
+                            logger.info(f"[Perplexity] 📷 Section {section_num} inline image: {img_name[:40]}... URL: {img_url[:80] if img_url else 'None'}...")
+                            if img_url:
+                                if section_num not in section_images:
+                                    section_images[section_num] = []
+                                if img_url not in [u for u, n in section_images[section_num]]:
+                                    section_images[section_num].append((img_url, img_name))
+            
+            # Handle pro_search_steps for CODE block charts  
+            if intended_usage == "pro_search_steps":
+                plan_block = block.get("plan_block", {})
+                steps = plan_block.get("steps", [])
+                for step in steps:
+                    if step.get("step_type") == "CODE":
+                        assets = step.get("assets", [])
+                        if assets:
+                            logger.debug(f"[Perplexity] CODE step has {len(assets)} assets")
+                        for asset in assets:
+                            if asset.get("asset_type") == "CHART":
+                                chart = asset.get("chart", {})
+                                chart_url = chart.get("url") or chart.get("svg_url")
+                                logger.info(f"[Perplexity] 📷 CODE chart: URL: {chart_url[:80] if chart_url else 'None'}...")
+                                if chart_url and chart_url not in [u for u, n in standalone_images]:
+                                    standalone_images.append((chart_url, "Generated Chart"))
+        
+        # Build final output with inline images
+        full_text = ""
+        
+        if markdown_sections:
+            sorted_sections = sorted(markdown_sections.keys())
+            
+            for section_num in sorted_sections:
+                section_text = markdown_sections[section_num]
+                full_text += section_text
+                
+                # Insert images for this section inline
+                if section_num in section_images:
+                    full_text += "\n\n"
+                    for img_url, img_name in section_images[section_num]:
+                        full_text += f"![{img_name}]({img_url})\n\n"
+                    logger.debug(f"[Perplexity] Inserted {len(section_images[section_num])} image(s) after section {section_num}")
+                
+                full_text += "\n\n"
+        
+        # Handle orphan images: sections with images but no corresponding markdown text
+        orphan_images = []
+        for section_num, images in section_images.items():
+            if section_num not in markdown_sections:
+                orphan_images.extend(images)
+                logger.debug(f"[Perplexity] Section {section_num} has {len(images)} orphan image(s) (no text)")
+        
+        # Combine standalone and orphan images
+        all_standalone = standalone_images + orphan_images
+        
+        # Append standalone images at the end
+        if all_standalone:
+            full_text += "\n\n---\n\n### Generated Visualizations\n\n"
+            for url, name in all_standalone:
+                full_text += f"![{name}]({url})\n\n"
+            logger.info(f"[Perplexity] Appended {len(all_standalone)} visualization(s) ({len(standalone_images)} standalone, {len(orphan_images)} orphan)")
+        
+        # Log stats
         if full_text:
+            total_images = sum(len(imgs) for imgs in section_images.values()) + len(standalone_images)
             word_count = len(full_text.split())
             line_count = full_text.count('\n') + 1
             latex_blocks = full_text.count('\\[') + full_text.count('$$')
-            inline_math = full_text.count('\\(') + full_text.count('$') - latex_blocks  
+            inline_math = full_text.count('\\(') + full_text.count('$') - latex_blocks
             headers = full_text.count('###') + full_text.count('##')
-            # Estimate tokens: ~4 chars per token for English, ~1.3 tokens per word
             est_tokens = int(len(full_text) / 4)
             
             logger.info(
-                f"[Perplexity] Response stats: "
-                f"{event_count} SSE events | "
+                f"[Perplexity] Thread stats: "
                 f"~{est_tokens:,} tokens | "
                 f"{len(full_text):,} chars | "
                 f"{word_count:,} words | "
-                f"{line_count} lines | "
-                f"{latex_blocks} display math | "
-                f"{max(0, inline_math)} inline math | "
-                f"{headers} headers"
+                f"{total_images} images"
             )
-        else:
-            logger.warning(f"[Perplexity] No answer extracted from {event_count} SSE events")
         
         return full_text if full_text else None
     
@@ -317,6 +495,7 @@ Include citations for your sources."""
         logger.debug(f"[{log_prefix}] Using model: {model}")
         
         def _blocking_request():
+            # Step 1: SSE request to get answer and thread slug
             resp = cffi_requests.post(
                 PERPLEXITY_URL,
                 headers=headers,
@@ -335,7 +514,24 @@ Include citations for your sources."""
                 logger.error(f"[{log_prefix}] HTTP {resp.status_code}")
                 return None
             
-            return self._parse_sse_response(resp)
+            sse_text, thread_slug = self._parse_sse_response(resp)
+            
+            # Step 2: If we got a thread slug, fetch complete thread for inline images
+            if thread_slug:
+                logger.info(f"[{log_prefix}] Fetching thread: {thread_slug}")
+                thread_data = self._fetch_thread_content(thread_slug, cookies, headers, timeout)
+                
+                if thread_data:
+                    thread_result = self._parse_thread_response(thread_data)
+                    if thread_result:
+                        return thread_result
+                    else:
+                        logger.warning(f"[{log_prefix}] Thread parse failed, using SSE text")
+                else:
+                    logger.warning(f"[{log_prefix}] Thread fetch failed, using SSE text")
+            
+            # Fallback to SSE text if thread fetch/parse failed
+            return sse_text
         
         try:
             result = await asyncio.to_thread(_blocking_request)
