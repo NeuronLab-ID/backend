@@ -20,9 +20,14 @@ from app.routes import api_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize database on startup."""
+    """Initialize database and container pool on startup."""
     create_tables()
+    # Start container pool
+    from app.services.executor import container_pool
+    await container_pool.start()
     yield
+    # Shutdown container pool
+    await container_pool.shutdown()
 
 
 app = FastAPI(
