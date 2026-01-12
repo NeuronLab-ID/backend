@@ -2,177 +2,142 @@
 Problem listing and details routes.
 """
 from fastapi import APIRouter, HTTPException, Query, Depends
+from sqlalchemy.orm import Session
 from typing import Optional
 import json
-import base64
 
-from app.config import PROBLEMS_DIR
-from app.database import SessionLocal
-from app.models.db import Problem
+from app.database import get_db
+from app.models.db import Problem, ProblemSolution
 from app.models.schemas import ProblemListResponse, ProblemSummary
 from app.routes.auth import get_current_user
+from app.repositories.problem_repository import ProblemRepository
+from app.utils.encoding import decode_base64_if_needed
+from app.services.solution_generator import generate_solution
 
 router = APIRouter()
 
 
-def decode_base64_if_needed(text: str) -> str:
-    """Decode Base64 string if it appears to be encoded."""
-    if not text:
-        return text
-    try:
-        # Try to decode as Base64
-        decoded = base64.b64decode(text).decode('utf-8')
-        # If successful and looks like readable text, return decoded
-        if decoded.isprintable() or '\n' in decoded:
-            return decoded
-    except:
-        pass
-    return text
+def _format_problem_detail(problem: Problem) -> dict:
+    """Format problem object for API response."""
+    result = {
+        "id": problem.id,
+        "title": problem.title,
+        "category": problem.category,
+        "difficulty": problem.difficulty,
+        "description": decode_base64_if_needed(problem.description),
+        "starter_code": problem.starter_code,
+        "test_cases": json.loads(problem.test_cases) if problem.test_cases else [],
+        "learn": decode_base64_if_needed(problem.learn_section),
+    }
+
+    if problem.example:
+        result["example"] = json.loads(problem.example)
+    if problem.video:
+        try:
+            result["video"] = json.loads(problem.video)
+        except (json.JSONDecodeError, TypeError):
+            result["video"] = problem.video
+    if problem.pytorch_starter_code:
+        result["pytorch_starter_code"] = problem.pytorch_starter_code
+    if problem.pytorch_test_cases:
+        result["pytorch_test_cases"] = json.loads(problem.pytorch_test_cases)
+    if problem.tinygrad_starter_code:
+        result["tinygrad_starter_code"] = problem.tinygrad_starter_code
+    if problem.tinygrad_test_cases:
+        result["tinygrad_test_cases"] = json.loads(problem.tinygrad_test_cases)
+    if problem.cuda_starter_code:
+        result["cuda_starter_code"] = problem.cuda_starter_code
+    if problem.cuda_test_cases:
+        result["cuda_test_cases"] = json.loads(problem.cuda_test_cases)
+    if hasattr(problem, 'playground_enabled') and problem.playground_enabled:
+        result["playground_enabled"] = problem.playground_enabled
+        result["playground_code"] = problem.playground_code
+
+    return result
 
 
 @router.get("", response_model=ProblemListResponse)
 async def list_problems(
-    page: int = 1, 
+    page: int = 1,
     limit: int = 20,
     category: Optional[str] = Query(None, description="Filter by category"),
-    search: Optional[str] = Query(None, description="Search by title")
+    search: Optional[str] = Query(None, description="Search by title"),
+    db: Session = Depends(get_db)
 ):
     """Get list of problems with pagination (public)."""
-    from app.models.db import Quest
-    
-    db = SessionLocal()
-    try:
-        query = db.query(Problem)
-        
-        # Apply category filter if provided
-        if category:
-            query = query.filter(Problem.category == category)
-        
-        # Apply search filter if provided
-        if search:
-            query = query.filter(Problem.title.ilike(f"%{search}%"))
-        
-        # Get total count
-        total = query.count()
-        
-        # Apply pagination
-        problems = query.order_by(Problem.id).offset((page - 1) * limit).limit(limit).all()
-        
-        # Get set of problem IDs that have quests
-        problem_ids = [p.id for p in problems]
-        quest_problem_ids = set(
-            q.problem_id for q in db.query(Quest.problem_id).filter(Quest.problem_id.in_(problem_ids)).all()
-        )
-        
-        return ProblemListResponse(
-            problems=[
-                ProblemSummary(
-                    id=p.id,
-                    title=p.title,
-                    category=p.category,
-                    difficulty=p.difficulty,
-                    has_quest=p.id in quest_problem_ids
-                )
-                for p in problems
-            ],
-            total=total
-        )
-    finally:
-        db.close()
+    repo = ProblemRepository(db)
+    problems, total = repo.list_problems(page, limit, category, search)
+    quest_ids = repo.get_problem_ids_with_quests([p.id for p in problems])
+
+    return ProblemListResponse(
+        problems=[
+            ProblemSummary(
+                id=p.id,
+                title=p.title,
+                category=p.category,
+                difficulty=p.difficulty,
+                has_quest=p.id in quest_ids
+            )
+            for p in problems
+        ],
+        total=total
+    )
 
 
 @router.get("/{problem_id}")
-async def get_problem(problem_id: int, user_id: int = Depends(get_current_user)):
+async def get_problem(
+    problem_id: int,
+    user_id: int = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Get problem details (requires auth)."""
-    db = SessionLocal()
-    try:
-        problem = db.query(Problem).filter(Problem.id == problem_id).first()
-        
-        if not problem:
-            raise HTTPException(404, "Problem not found")
-        
-        # Return as dict matching JSON structure
-        result = {
-            "id": problem.id,
-            "title": problem.title,
-            "category": problem.category,
-            "difficulty": problem.difficulty,
-            "description": decode_base64_if_needed(problem.description),
-            "starter_code": problem.starter_code,
-            "test_cases": json.loads(problem.test_cases) if problem.test_cases else [],
-            "learn": decode_base64_if_needed(problem.learn_section),
-        }
-        
-        # Add optional fields if present
-        if problem.example:
-            result["example"] = json.loads(problem.example)
-        if problem.video:
-            # Handle video (could be JSON array or string)
-            try:
-                result["video"] = json.loads(problem.video)
-            except (json.JSONDecodeError, TypeError):
-                result["video"] = problem.video
-        if problem.pytorch_starter_code:
-            result["pytorch_starter_code"] = problem.pytorch_starter_code
-        if problem.pytorch_test_cases:
-            result["pytorch_test_cases"] = json.loads(problem.pytorch_test_cases)
-        if problem.tinygrad_starter_code:
-            result["tinygrad_starter_code"] = problem.tinygrad_starter_code
-        if problem.tinygrad_test_cases:
-            result["tinygrad_test_cases"] = json.loads(problem.tinygrad_test_cases)
-        if problem.cuda_starter_code:
-            result["cuda_starter_code"] = problem.cuda_starter_code
-        if problem.cuda_test_cases:
-            result["cuda_test_cases"] = json.loads(problem.cuda_test_cases)
-        
-        # Playground fields
-        if problem.playground_enabled:
-            result["playground_enabled"] = problem.playground_enabled
-            result["playground_code"] = problem.playground_code
-        
-        return result
-    finally:
-        db.close()
+    repo = ProblemRepository(db)
+    problem = repo.get_by_id(problem_id)
+
+    if not problem:
+        raise HTTPException(404, "Problem not found")
+
+    return _format_problem_detail(problem)
 
 
 @router.get("/{problem_id}/solution")
-async def get_solution(problem_id: int, user_id: int = Depends(get_current_user)):
+async def get_solution(
+    problem_id: int,
+    user_id: int = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Get AI-generated solution for a problem (requires auth, cached in database)."""
-    from app.services.solution_generator import generate_solution
-    from app.models.db import ProblemSolution
-    
-    db = SessionLocal()
-    try:
-        # Check if solution exists in database
-        cached = db.query(ProblemSolution).filter(ProblemSolution.problem_id == problem_id).first()
-        if cached:
-            return {"solution": cached.solution, "cached": True}
-        
-        # Load problem from database
-        problem = db.query(Problem).filter(Problem.id == problem_id).first()
-        if not problem:
-            raise HTTPException(404, "Problem not found")
-        
-        # Convert to dict for solution generator
-        problem_data = {
-            "id": problem.id,
-            "title": problem.title,
-            "description": problem.description,
-            "starter_code": problem.starter_code,
-            "test_cases": json.loads(problem.test_cases) if problem.test_cases else []
-        }
-        
-        # Generate solution using AI
-        solution = await generate_solution(problem_data)
-        
-        if not solution:
-            raise HTTPException(500, "Failed to generate solution")
-        
-        # Cache in database
-        new_solution = ProblemSolution(problem_id=problem_id, solution=solution)
-        db.add(new_solution)
-        db.commit()
-        
-        return {"solution": solution, "cached": False}
-    finally:
-        db.close()
+    # Check if solution exists in database
+    cached = db.query(ProblemSolution).filter(
+        ProblemSolution.problem_id == problem_id
+    ).first()
+    if cached:
+        return {"solution": cached.solution, "cached": True}
+
+    # Load problem from database
+    repo = ProblemRepository(db)
+    problem = repo.get_by_id(problem_id)
+    if not problem:
+        raise HTTPException(404, "Problem not found")
+
+    # Convert to dict for solution generator
+    problem_data = {
+        "id": problem.id,
+        "title": problem.title,
+        "description": problem.description,
+        "starter_code": problem.starter_code,
+        "test_cases": json.loads(problem.test_cases) if problem.test_cases else []
+    }
+
+    # Generate solution using AI
+    solution = await generate_solution(problem_data)
+
+    if not solution:
+        raise HTTPException(500, "Failed to generate solution")
+
+    # Cache in database
+    new_solution = ProblemSolution(problem_id=problem_id, solution=solution)
+    db.add(new_solution)
+    db.commit()
+
+    return {"solution": solution, "cached": False}
