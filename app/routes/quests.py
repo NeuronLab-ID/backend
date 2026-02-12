@@ -4,6 +4,7 @@ Quest routes for CRUD and execution.
 This is the refactored slim version that delegates to controllers and services.
 Original: 1162 lines -> Refactored: ~130 lines
 """
+
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -18,7 +19,11 @@ from app.models.schemas import (
     FixMermaidRequest,
 )
 from app.controllers import QuestController, create_quest, check_quest_exists
-from app.services.reasoning_service import fix_mermaid_code, generate_test_case_reasoning
+from app.dependencies import get_quest_controller
+from app.services.reasoning_service import (
+    fix_mermaid_code,
+    generate_test_case_reasoning,
+)
 
 
 router = APIRouter()
@@ -29,10 +34,9 @@ async def get_quest(
     problem_id: int,
     generate: bool = False,
     user_id: int = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    controller: QuestController = Depends(get_quest_controller),
 ):
     """Get quest for a problem (requires auth)."""
-    controller = QuestController(db)
     return await controller.get_quest(problem_id, generate)
 
 
@@ -40,10 +44,9 @@ async def get_quest(
 async def execute_quest_code(
     request: QuestExecuteRequest,
     user_id: int = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    controller: QuestController = Depends(get_quest_controller),
 ):
     """Execute code for a quest exercise (requires auth)."""
-    controller = QuestController(db)
     return await controller.execute_code(request.problem_id, request.step, request.code)
 
 
@@ -51,7 +54,7 @@ async def execute_quest_code(
 async def create_quest_route(
     request: QuestCreateRequest,
     user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Create a quest (LOCAL_DEV only)."""
     user_id = user["user_id"] if isinstance(user, dict) else user
@@ -62,7 +65,7 @@ async def create_quest_route(
 async def check_quest_exists_route(
     problem_id: int,
     user_id: int = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Check if a quest exists for a problem (requires auth)."""
     return check_quest_exists(db, problem_id)
@@ -72,34 +75,32 @@ async def check_quest_exists_route(
 async def save_quest_progress(
     request: QuestProgressSaveRequest,
     user_id: int = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Save progress for a quest step."""
     controller = QuestController(db)
-    return await controller.save_progress(user_id, request.problem_id, request.step, request.code)
+    return await controller.save_progress(
+        user_id, request.problem_id, request.step, request.code
+    )
 
 
 @router.get("/quest/progress/{problem_id}")
 async def get_quest_progress(
     problem_id: int,
     user_id: int = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    controller: QuestController = Depends(get_quest_controller),
 ):
     """Get user's progress for all steps of a quest."""
-    controller = QuestController(db)
     return controller.get_progress(user_id, problem_id)
 
 
 @router.post("/quest/reasoning")
 async def generate_test_case_reasoning_route(
-    request: QuestReasoningRequest,
-    user_id: int = Depends(get_current_user)
+    request: QuestReasoningRequest, user_id: int = Depends(get_current_user)
 ):
     """Generate step-by-step reasoning for a test case."""
     return await generate_test_case_reasoning(
-        request.function_signature,
-        request.test_input,
-        request.expected_output
+        request.function_signature, request.test_input, request.expected_output
     )
 
 
@@ -107,10 +108,9 @@ async def generate_test_case_reasoning_route(
 async def get_full_reasoning(
     problem_id: int,
     user_id: int = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    controller: QuestController = Depends(get_quest_controller),
 ):
     """Get cached full reasoning for a problem if it exists."""
-    controller = QuestController(db)
     return controller.get_cached_reasoning(problem_id)
 
 
@@ -121,10 +121,9 @@ async def stream_full_reasoning(
     usePerplexity: bool = False,
     usePerplexityReasoning: bool = False,
     user_id: int = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    controller: QuestController = Depends(get_quest_controller),
 ):
     """Generate and stream full reasoning for all quest steps using SSE."""
-    controller = QuestController(db)
     return await controller.stream_full_reasoning(
         problem_id, user_id, force, usePerplexity, usePerplexityReasoning
     )
@@ -132,8 +131,7 @@ async def stream_full_reasoning(
 
 @router.post("/fix-mermaid")
 async def fix_mermaid_code_route(
-    request: FixMermaidRequest,
-    user_id: int = Depends(get_current_user)
+    request: FixMermaidRequest, user_id: int = Depends(get_current_user)
 ):
     """Use AI to fix invalid Mermaid diagram code."""
     fixed_code = await fix_mermaid_code(request.code, request.error)
@@ -146,10 +144,9 @@ async def export_reasoning_markdown(
     use_ai: bool = False,
     force: bool = False,
     user_id: int = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    controller: QuestController = Depends(get_quest_controller),
 ):
     """Export reasoning as formatted markdown."""
-    controller = QuestController(db)
     return await controller.export_markdown(problem_id, user_id, use_ai, force)
 
 
@@ -159,10 +156,9 @@ async def export_reasoning_latex(
     useSonnet: bool = False,
     force: bool = False,
     user_id: int = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    controller: QuestController = Depends(get_quest_controller),
 ):
     """Export reasoning as valid LaTeX document."""
-    controller = QuestController(db)
     return await controller.export_latex(problem_id, user_id, useSonnet, force)
 
 
@@ -172,8 +168,7 @@ async def export_reasoning_notebook(
     useSonnet: bool = False,
     force: bool = False,
     user_id: int = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    controller: QuestController = Depends(get_quest_controller),
 ):
     """Export reasoning as Jupyter notebook."""
-    controller = QuestController(db)
     return await controller.export_notebook(problem_id, user_id, useSonnet, force)

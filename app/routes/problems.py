@@ -1,6 +1,7 @@
 """
 Problem listing and details routes.
 """
+
 from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -11,6 +12,7 @@ from app.models.db import Problem, ProblemSolution
 from app.models.schemas import ProblemListResponse, ProblemSummary
 from app.routes.auth import get_current_user
 from app.repositories.problem_repository import ProblemRepository
+from app.dependencies import get_problem_repo
 from app.utils.encoding import decode_base64_if_needed
 from app.services.solution_generator import generate_solution
 
@@ -49,7 +51,7 @@ def _format_problem_detail(problem: Problem) -> dict:
         result["cuda_starter_code"] = problem.cuda_starter_code
     if problem.cuda_test_cases:
         result["cuda_test_cases"] = json.loads(problem.cuda_test_cases)
-    if hasattr(problem, 'playground_enabled') and problem.playground_enabled:
+    if hasattr(problem, "playground_enabled") and problem.playground_enabled:
         result["playground_enabled"] = problem.playground_enabled
         result["playground_code"] = problem.playground_code
 
@@ -62,10 +64,9 @@ async def list_problems(
     limit: int = 20,
     category: Optional[str] = Query(None, description="Filter by category"),
     search: Optional[str] = Query(None, description="Search by title"),
-    db: Session = Depends(get_db)
+    repo: ProblemRepository = Depends(get_problem_repo),
 ):
     """Get list of problems with pagination (public)."""
-    repo = ProblemRepository(db)
     problems, total = repo.list_problems(page, limit, category, search)
     quest_ids = repo.get_problem_ids_with_quests([p.id for p in problems])
 
@@ -76,11 +77,11 @@ async def list_problems(
                 title=p.title,
                 category=p.category,
                 difficulty=p.difficulty,
-                has_quest=p.id in quest_ids
+                has_quest=p.id in quest_ids,
             )
             for p in problems
         ],
-        total=total
+        total=total,
     )
 
 
@@ -88,10 +89,9 @@ async def list_problems(
 async def get_problem(
     problem_id: int,
     user_id: int = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    repo: ProblemRepository = Depends(get_problem_repo),
 ):
     """Get problem details (requires auth)."""
-    repo = ProblemRepository(db)
     problem = repo.get_by_id(problem_id)
 
     if not problem:
@@ -104,18 +104,20 @@ async def get_problem(
 async def get_solution(
     problem_id: int,
     user_id: int = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    repo: ProblemRepository = Depends(get_problem_repo),
 ):
     """Get AI-generated solution for a problem (requires auth, cached in database)."""
     # Check if solution exists in database
-    cached = db.query(ProblemSolution).filter(
-        ProblemSolution.problem_id == problem_id
-    ).first()
+    cached = (
+        db.query(ProblemSolution)
+        .filter(ProblemSolution.problem_id == problem_id)
+        .first()
+    )
     if cached:
         return {"solution": cached.solution, "cached": True}
 
     # Load problem from database
-    repo = ProblemRepository(db)
     problem = repo.get_by_id(problem_id)
     if not problem:
         raise HTTPException(404, "Problem not found")
@@ -126,7 +128,7 @@ async def get_solution(
         "title": problem.title,
         "description": problem.description,
         "starter_code": problem.starter_code,
-        "test_cases": json.loads(problem.test_cases) if problem.test_cases else []
+        "test_cases": json.loads(problem.test_cases) if problem.test_cases else [],
     }
 
     # Generate solution using AI

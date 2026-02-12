@@ -1,6 +1,7 @@
 """
 Submission CRUD routes.
 """
+
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 
@@ -9,6 +10,7 @@ from app.routes.auth import get_current_user
 from app.models.db import Submission
 from app.models.schemas import SaveSubmissionRequest
 from app.repositories.submission_repository import SubmissionRepository
+from app.dependencies import get_submission_repo
 
 router = APIRouter()
 
@@ -17,10 +19,9 @@ router = APIRouter()
 async def get_submissions(
     problem_id: int,
     user_id: int = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    repo: SubmissionRepository = Depends(get_submission_repo),
 ):
     """Get user's submission history for a problem (requires auth)."""
-    repo = SubmissionRepository(db)
     submissions = repo.get_by_problem(user_id, problem_id)
 
     return {
@@ -31,7 +32,7 @@ async def get_submissions(
                 "passed": s.passed,
                 "error": s.error,
                 "execution_time": s.execution_time,
-                "created_at": s.created_at.isoformat()
+                "created_at": s.created_at.isoformat(),
             }
             for s in submissions
         ]
@@ -42,23 +43,22 @@ async def get_submissions(
 async def save_submission(
     request: SaveSubmissionRequest,
     user_id: int = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    repo: SubmissionRepository = Depends(get_submission_repo),
 ):
     """Save a submission (when user clicks Save)."""
-    repo = SubmissionRepository(db)
     submission = Submission(
         user_id=user_id,
         problem_id=request.problem_id,
         code=request.code,
         passed=request.passed,
-        execution_time=0
+        execution_time=0,
     )
     submission = repo.create(submission)
 
     return {
         "id": submission.id,
         "message": "Submission saved",
-        "created_at": submission.created_at.isoformat()
+        "created_at": submission.created_at.isoformat(),
     }
 
 
@@ -66,10 +66,9 @@ async def save_submission(
 async def delete_submission(
     submission_id: int,
     user_id: int = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    repo: SubmissionRepository = Depends(get_submission_repo),
 ):
     """Delete a submission (requires auth, user can only delete their own)."""
-    repo = SubmissionRepository(db)
     if not repo.delete(user_id, submission_id):
         raise HTTPException(404, "Submission not found")
     return {"message": "Submission deleted"}
