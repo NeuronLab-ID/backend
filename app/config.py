@@ -1,6 +1,7 @@
 """
 Application configuration and settings.
 """
+
 import os
 from pathlib import Path
 
@@ -12,6 +13,9 @@ BASE_DIR = Path(__file__).parent.parent
 _DEFAULT_DEEPML_PATH = Path("d:/PythonProject/deepml")
 PROBLEMS_DIR = Path(os.getenv("PROBLEMS_DIR", str(_DEFAULT_DEEPML_PATH / "problems")))
 QUESTS_DIR = Path(os.getenv("QUESTS_DIR", str(_DEFAULT_DEEPML_PATH / "quests")))
+QUEST_GENERATOR_PATH = Path(
+    os.getenv("QUEST_GENERATOR_PATH", str(_DEFAULT_DEEPML_PATH / "quest_generator.py"))
+)
 
 # Database
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./deepml.db")
