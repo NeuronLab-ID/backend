@@ -32,4 +32,3 @@ SANDBOX_MEMORY = os.getenv("SANDBOX_MEMORY", "512m")
 
 # Feature flags
 LOCAL_DEV = os.getenv("LOCAL_DEV", "false").lower() == "true"
-AI_BACKEND = os.getenv("AI_BACKEND", "")

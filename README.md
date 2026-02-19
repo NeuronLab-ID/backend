@@ -27,9 +27,7 @@ FastAPI backend for the NeuronLab ML learning platform - an interactive platform
 
 - Python 3.10+
 - Docker (for code execution sandbox)
-- OpenAI API key (or GitHub Copilot with API access)
-
-> **Note:** AI-powered features (hints, solutions, quest generation, math examples) require an OpenAI API key or GitHub Copilot installed on your system with API access enabled.
+- OpenAI API key
 
 ### Installation
 
@@ -61,46 +59,13 @@ DATABASE_URL=sqlite:///./deepml.db
 PROBLEMS_DIR=d:/PythonProject/deepml/problems
 QUESTS_DIR=d:/PythonProject/deepml/quests
 
-# AI Backend Configuration
-# Options: "openai", "github", "copilot"
-AI_BACKEND=openai
-
-# Model for OpenAI/GitHub backends
+# OpenAI Configuration
 AI_MODEL=gpt-4o-mini
-
-# OpenAI API Key (required for AI_BACKEND=openai)
 OPENAI_API_KEY=your-openai-api-key
-
-# Copilot CLI Model (for AI_BACKEND=copilot)
-# Available: gpt-5.1, gpt-5, gpt-4.1, claude-sonnet-4, gemini-3-pro-preview
-COPILOT_MODEL=gpt-4.1
+OPENAI_BASE_URL=https://api.openai.com/v1  # (optional, for custom endpoints)
 ```
 
-### AI Backend Options
-
-| Backend | Description | Requirements |
-|---------|-------------|--------------|
-| `openai` | OpenAI API (GPT-4o-mini default) | `OPENAI_API_KEY` in `.env` |
-| `github` | GitHub Models API (free) | `gh auth login` |
-| `copilot` | GitHub Copilot CLI | Install: `copilot` CLI from GitHub |
-
-**GitHub Backend Setup:**
-```bash
-# Install GitHub CLI
-winget install GitHub.cli
-
-# Authenticate
-gh auth login
-```
-
-**Copilot CLI Setup:**
-```bash
-# Install Copilot CLI (requires Copilot subscription)
-# Download from https://githubnext.com/projects/copilot-cli
-
-# Verify installation
-copilot -v
-```
+The backend uses the OpenAI API. Set `OPENAI_API_KEY` in `.env`. For custom endpoints (Ollama, LM Studio, Azure), set `OPENAI_BASE_URL`.
 
 ### Database Setup
 
