@@ -13,11 +13,9 @@ import time
 import tempfile
 import logging
 
-from app.config import SANDBOX_IMAGE, SANDBOX_TIMEOUT, SANDBOX_MEMORY
+from app.config import SANDBOX_IMAGE, SANDBOX_TIMEOUT, SANDBOX_MEMORY, SANDBOX_POOL_SIZE
 
 logger = logging.getLogger(__name__)
-
-POOL_SIZE = int(os.getenv("CONTAINER_POOL_SIZE", "2"))
 
 
 class ContainerPool:
@@ -27,7 +25,7 @@ class ContainerPool:
     via 'docker exec' to avoid container creation overhead.
     """
 
-    def __init__(self, pool_size: int = POOL_SIZE):
+    def __init__(self, pool_size: int = SANDBOX_POOL_SIZE):
         self.pool_size = pool_size
         self._containers: List[str] = []
         self._available: asyncio.Queue = asyncio.Queue()
@@ -50,14 +48,10 @@ class ContainerPool:
                     await self._available.put(container_name)
                     logger.info(f"Created container: {container_name}")
                 else:
-                    logger.warning(
-                        f"Failed to create container {i + 1}/{self.pool_size}"
-                    )
+                    logger.warning(f"Failed to create container {i + 1}/{self.pool_size}")
 
             self._started = True
-            logger.info(
-                f"Container pool started with {len(self._containers)} containers"
-            )
+            logger.info(f"Container pool started with {len(self._containers)} containers")
 
     async def _create_container(self, container_name: str) -> bool:
         """Create a warm container with sleep infinity."""
@@ -167,9 +161,7 @@ class ContainerPool:
 container_pool = ContainerPool()
 
 
-async def execute_code(
-    code: str, test_cases: List[Dict], timeout: int = 30
-) -> Dict[str, Any]:
+async def execute_code(code: str, test_cases: List[Dict], timeout: int = 30) -> Dict[str, Any]:
     """
     Execute user code in a Docker sandbox using the container pool.
 
@@ -244,9 +236,7 @@ async def run_in_docker_exec(payload: str, timeout: int) -> Dict[str, Any]:
         # Execute code in the warm container using docker exec
         cmd = ["docker", "exec", "-i", container, "python", "runner.py"]
 
-        proc = subprocess.run(
-            cmd, input=payload.encode(), capture_output=True, timeout=timeout
-        )
+        proc = subprocess.run(cmd, input=payload.encode(), capture_output=True, timeout=timeout)
 
         stdout = proc.stdout.decode("utf-8").strip()
         stderr = proc.stderr.decode("utf-8").strip()
@@ -269,9 +259,7 @@ async def run_in_docker_exec(payload: str, timeout: int) -> Dict[str, Any]:
                         # Capture any extra output before JSON as a warning
                         extra_output = stdout[:json_start].strip()
                         if extra_output and "results" in result:
-                            result["warning"] = (
-                                f"Code produced extra output: {extra_output[:200]}"
-                            )
+                            result["warning"] = f"Code produced extra output: {extra_output[:200]}"
                         return result
                     except json.JSONDecodeError:
                         pass
@@ -353,9 +341,7 @@ async def run_in_docker_cli(payload: str, timeout: int) -> Dict[str, Any]:
             "runner.py",
         ]
 
-        proc = subprocess.run(
-            cmd, input=payload.encode(), capture_output=True, timeout=timeout
-        )
+        proc = subprocess.run(cmd, input=payload.encode(), capture_output=True, timeout=timeout)
 
         stdout = proc.stdout.decode("utf-8").strip()
         stderr = proc.stderr.decode("utf-8").strip()
@@ -378,9 +364,7 @@ async def run_in_docker_cli(payload: str, timeout: int) -> Dict[str, Any]:
                         # Capture any extra output before JSON as a warning
                         extra_output = stdout[:json_start].strip()
                         if extra_output and "results" in result:
-                            result["warning"] = (
-                                f"Code produced extra output: {extra_output[:200]}"
-                            )
+                            result["warning"] = f"Code produced extra output: {extra_output[:200]}"
                         return result
                     except json.JSONDecodeError:
                         pass
@@ -397,9 +381,7 @@ async def run_in_docker_cli(payload: str, timeout: int) -> Dict[str, Any]:
 
     except subprocess.TimeoutExpired:
         # Kill the container if it's still running
-        subprocess.run(
-            ["docker", "kill", "$(docker ps -q)"], shell=True, capture_output=True
-        )
+        subprocess.run(["docker", "kill", "$(docker ps -q)"], shell=True, capture_output=True)
         raise asyncio.TimeoutError()
     except FileNotFoundError:
         return {

@@ -1,12 +1,14 @@
 """
 Pydantic schemas for API requests and responses.
 """
+
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List, Any
 from datetime import datetime
 
 
 # ========== Auth Schemas ==========
+
 
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
@@ -33,6 +35,7 @@ class UserResponse(BaseModel):
 
 # ========== Problem Schemas ==========
 
+
 class ProblemSummary(BaseModel):
     id: int
     title: str
@@ -48,9 +51,10 @@ class ProblemListResponse(BaseModel):
 
 # ========== Execution Schemas ==========
 
+
 class ExecuteRequest(BaseModel):
     problem_id: int
-    code: str
+    code: str = Field(..., max_length=50000)
 
 
 class TestResult(BaseModel):
@@ -71,6 +75,7 @@ class ExecuteResponse(BaseModel):
 
 
 # ========== Submission Schemas ==========
+
 
 class SubmissionResponse(BaseModel):
     id: int
@@ -93,6 +98,7 @@ class ProgressResponse(BaseModel):
 
 # ========== Hint Schemas ==========
 
+
 class HintRequest(BaseModel):
     problem_id: int
     code: str
@@ -101,10 +107,11 @@ class HintRequest(BaseModel):
 
 # ========== Quest Schemas ==========
 
+
 class QuestExecuteRequest(BaseModel):
     problem_id: int
     step: int
-    code: str
+    code: str = Field(..., max_length=50000)
 
 
 class QuestHintRequest(BaseModel):
