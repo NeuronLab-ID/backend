@@ -5,6 +5,7 @@ Follows Factory Pattern for provider instantiation.
 Supports dependency injection for testing.
 """
 
+import os
 from typing import Optional
 
 from .ai_provider_base import AIProvider, SearchProvider
@@ -64,17 +65,29 @@ def get_reasoning_provider(use_perplexity: bool = False) -> AIProvider:
     """
     Get the appropriate provider for reasoning generation.
 
-    Args:
-        use_perplexity: If True, prefer Perplexity provider
+    Priority: REASONING_PROVIDER env var > use_perplexity param > default (openai)
 
-    Returns:
-        AIProvider instance for reasoning
+    Env vars:
+        REASONING_PROVIDER: "openai" or "perplexity" (overrides use_perplexity param)
+        REASONING_MODEL: Model name for reasoning (only used when provider is openai)
     """
-    if use_perplexity:
+    # Env var takes priority over function parameter
+    env_provider = os.getenv("REASONING_PROVIDER", "").lower()
+
+    if env_provider == "perplexity" or (not env_provider and use_perplexity):
         perplexity = get_provider("perplexity")
         if perplexity.is_configured():
             return perplexity
-        print("[Provider] Perplexity not configured, falling back to default")
+        print("[Provider] Perplexity not configured, falling back to OpenAI")
+
+    # Check for custom reasoning model
+    reasoning_model = os.getenv("REASONING_MODEL")
+    if reasoning_model:
+        # Create/cache a separate OpenAI instance with the reasoning model
+        cache_key = f"openai-reasoning-{reasoning_model}"
+        if cache_key not in _providers:
+            _providers[cache_key] = OpenAIProvider(model=reasoning_model)
+        return _providers[cache_key]
 
     return get_provider()
 
