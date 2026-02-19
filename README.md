@@ -63,9 +63,15 @@ QUESTS_DIR=d:/PythonProject/deepml/quests
 AI_MODEL=gpt-4o-mini
 OPENAI_API_KEY=your-openai-api-key
 OPENAI_BASE_URL=https://api.openai.com/v1  # (optional, for custom endpoints)
+
+# Reasoning Configuration (optional)
+REASONING_PROVIDER=openai          # "openai" or "perplexity"
+REASONING_MODEL=gpt-4o             # model for reasoning (falls back to AI_MODEL)
 ```
 
 The backend uses the OpenAI API. Set `OPENAI_API_KEY` in `.env`. For custom endpoints (Ollama, LM Studio, Azure), set `OPENAI_BASE_URL`.
+
+You can use a different provider or model specifically for reasoning generation by setting `REASONING_PROVIDER` and `REASONING_MODEL`. If not set, reasoning uses the default OpenAI provider with `AI_MODEL`.
 
 ### Database Setup
 
