@@ -22,6 +22,8 @@ from docker.models.containers import Container
 
 from app.config import (
     SANDBOX_IMAGE,
+    SANDBOX_CONTAINER_TTL,
+    SANDBOX_MAX_EXECUTIONS,
     SANDBOX_MEMORY,
     SANDBOX_PIDS_LIMIT,
     SANDBOX_POOL_SIZE,
@@ -81,6 +83,8 @@ class ContainerPool:
         self._lock: asyncio.Lock = asyncio.Lock()
         self._started: bool = False
         self._replacement_failures: list[float] = []
+        self._exec_counts: dict[str, int] = {}
+        self._created_at: dict[str, float] = {}
 
     async def start(self) -> None:
         """Create and initialize all containers in the pool."""
@@ -129,7 +133,7 @@ class ContainerPool:
             return None
         try:
             if SANDBOX_SECURITY_LEVEL == "full":
-                return await _to_thread(
+                container = await _to_thread(
                     self._client.containers.run,
                     image=SANDBOX_IMAGE,
                     command="sleep infinity",
@@ -146,8 +150,11 @@ class ContainerPool:
                     security_opt=["no-new-privileges"],
                     pids_limit=SANDBOX_PIDS_LIMIT,
                 )
+                self._created_at[container_name] = time.time()
+                self._exec_counts[container_name] = 0
+                return container
 
-            return await _to_thread(
+            container = await _to_thread(
                 self._client.containers.run,
                 image=SANDBOX_IMAGE,
                 command="sleep infinity",
@@ -160,11 +167,14 @@ class ContainerPool:
                 user="nobody",
                 tmpfs={"/tmp": "size=64m,mode=1777"},
             )
+            self._created_at[container_name] = time.time()
+            self._exec_counts[container_name] = 0
+            return container
         except APIError as exc:
             if SANDBOX_SECURITY_LEVEL == "full":
                 logger.warning("Security flags failed, retrying without them: %s", exc)
                 try:
-                    return await _to_thread(
+                    container = await _to_thread(
                         self._client.containers.run,
                         image=SANDBOX_IMAGE,
                         command="sleep infinity",
@@ -177,6 +187,9 @@ class ContainerPool:
                         user="nobody",
                         tmpfs={"/tmp": "size=64m,mode=1777"},
                     )
+                    self._created_at[container_name] = time.time()
+                    self._exec_counts[container_name] = 0
+                    return container
                 except Exception as inner_exc:
                     logger.error("Failed to create container without security flags: %s", inner_exc)
                     return None
@@ -215,6 +228,19 @@ class ContainerPool:
             await self._replace_container(container_name)
             return
 
+        exec_count = self._exec_counts.get(container_name, 0) + 1
+        self._exec_counts[container_name] = exec_count
+        age = time.time() - self._created_at.get(container_name, 0)
+        if exec_count >= SANDBOX_MAX_EXECUTIONS or age >= SANDBOX_CONTAINER_TTL:
+            logger.info(
+                "Recycling container %s: execs=%s, age=%ss",
+                container_name,
+                exec_count,
+                f"{age:.0f}",
+            )
+            await self._replace_container(container_name)
+            return
+
         await self._available.put(container_name)
 
     async def _replace_container(self, old_name: str) -> None:
@@ -223,9 +249,13 @@ class ContainerPool:
         if len(self._replacement_failures) >= 3:
             logger.critical("Container replacement circuit breaker tripped")
             _ = self._containers.pop(old_name, None)
+            _ = self._exec_counts.pop(old_name, None)
+            _ = self._created_at.pop(old_name, None)
             return
 
         container = self._containers.pop(old_name, None)
+        _ = self._exec_counts.pop(old_name, None)
+        _ = self._created_at.pop(old_name, None)
         if container is not None:
             try:
                 await _to_thread(container.remove, force=True)
@@ -257,6 +287,8 @@ class ContainerPool:
                     logger.warning("Failed to remove container %s: %s", container.name, exc)
 
             self._containers.clear()
+            self._exec_counts.clear()
+            self._created_at.clear()
             while not self._available.empty():
                 try:
                     _ = self._available.get_nowait()
