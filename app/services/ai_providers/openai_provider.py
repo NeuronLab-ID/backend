@@ -9,6 +9,7 @@ from loguru import logger
 from openai import OpenAI
 
 from .ai_provider_base import AIProvider
+from app.prompts import get_hint_system_prompt, get_hint_prompt
 
 
 class OpenAIProvider(AIProvider):
@@ -60,38 +61,17 @@ class OpenAIProvider(AIProvider):
 
             logger.debug(f"[OpenAI] Generating hint for: {problem_title}")
 
+            system_content = get_hint_system_prompt()
+            user_content = get_hint_prompt(
+                problem_title, problem_desc, user_code[:1000], error[:500]
+            )
+
             def _blocking_call():
                 return client.chat.completions.create(
                     model=self.model,
                     messages=[
-                        {
-                            "role": "system",
-                            "content": """You are a helpful programming tutor. When a student's code has an error:
-1. Give a SHORT hint (1-2 sentences max)
-2. Guide them toward the solution without giving it away
-3. Focus on the specific error type
-4. Be encouraging
-
-DO NOT:
-- Give the full solution
-- Write more than 2 sentences
-- Be condescending""",
-                        },
-                        {
-                            "role": "user",
-                            "content": f"""Problem: {problem_title}
-Description: {problem_desc}
-
-Student's Code:
-```python
-{user_code[:1000]}
-```
-
-Error:
-{error[:500]}
-
-Give a short, helpful hint:""",
-                        },
+                        {"role": "system", "content": system_content},
+                        {"role": "user", "content": user_content},
                     ],
                     max_tokens=200,
                     temperature=0.7,
@@ -126,7 +106,7 @@ Give a short, helpful hint:""",
                 return client.chat.completions.create(
                     model=self.model,
                     messages=messages,
-                    max_tokens=3000,
+                    max_tokens=4000,
                     temperature=0.3,
                 )
 

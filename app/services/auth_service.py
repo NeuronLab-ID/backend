@@ -1,6 +1,6 @@
 from passlib.context import CryptContext
 from jose import JWTError, jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.config import JWT_SECRET, JWT_ALGORITHM, JWT_EXPIRE_HOURS
 
@@ -19,8 +19,10 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def create_access_token(user_id: int) -> str:
     """Create a JWT access token."""
-    expire = datetime.utcnow() + timedelta(hours=JWT_EXPIRE_HOURS)
-    return jwt.encode({"sub": str(user_id), "exp": expire}, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    expire = datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRE_HOURS)
+    return jwt.encode(
+        {"sub": str(user_id), "exp": expire}, JWT_SECRET, algorithm=JWT_ALGORITHM
+    )
 
 
 def decode_token(token: str) -> int | None:

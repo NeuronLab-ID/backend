@@ -3,6 +3,7 @@ Application configuration and settings.
 """
 
 import os
+import warnings
 from pathlib import Path
 
 # Base paths
@@ -32,3 +33,16 @@ SANDBOX_MEMORY = os.getenv("SANDBOX_MEMORY", "512m")
 
 # Feature flags
 LOCAL_DEV = os.getenv("LOCAL_DEV", "false").lower() == "true"
+
+# AI provider configuration
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+AI_MODEL = os.getenv("AI_MODEL", "gpt-4o-mini")
+REASONING_PROVIDER = os.getenv("REASONING_PROVIDER", "openai")
+REASONING_MODEL = os.getenv("REASONING_MODEL", "")
+
+# Security warnings for production
+if JWT_SECRET == "dev-secret-change-in-production":
+    warnings.warn(
+        "JWT_SECRET is using the default value. Set JWT_SECRET environment variable for production.",
+        stacklevel=1,
+    )

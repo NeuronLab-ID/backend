@@ -3,7 +3,7 @@ Tests for authentication routes: register, login, /me.
 """
 
 from unittest.mock import patch, MagicMock
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def test_register_success(client, test_user):
@@ -13,7 +13,7 @@ def test_register_success(client, test_user):
     mock_user.id = 99
     mock_user.username = "newuser"
     mock_user.email = "new@example.com"
-    mock_user.created_at = datetime.utcnow()
+    mock_user.created_at = datetime.now(timezone.utc)
 
     with patch(
         "app.repositories.auth_repository.AuthRepository.create",

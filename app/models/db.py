@@ -1,25 +1,28 @@
 """
 SQLAlchemy database models.
 """
+
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Index
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.database import Base
 
 
 class User(Base):
     """User model for authentication."""
+
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(50), unique=True, index=True, nullable=False)
     email = Column(String(100), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class Submission(Base):
     """Submission model for tracking user progress."""
+
     __tablename__ = "submissions"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -29,22 +32,24 @@ class Submission(Base):
     passed = Column(Boolean, default=False)
     error = Column(Text, nullable=True)
     execution_time = Column(Integer, default=0)  # milliseconds
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class Quest(Base):
     """Quest model for storing learning quests as JSON."""
+
     __tablename__ = "quests"
 
     id = Column(Integer, primary_key=True, index=True)
     problem_id = Column(Integer, unique=True, index=True, nullable=False)
     data = Column(Text, nullable=False)  # Full quest JSON as string
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     created_by = Column(Integer, nullable=True)  # User ID who created it
 
 
 class QuestProgress(Base):
     """Track user progress on quest steps."""
+
     __tablename__ = "quest_progress"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -53,26 +58,26 @@ class QuestProgress(Base):
     step = Column(Integer, nullable=False)
     code = Column(Text, nullable=False)  # Saved solution code
     completed = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
     # Index for querying user's progress on a problem
-    __table_args__ = (
-        Index('ix_quest_progress_user_problem', 'user_id', 'problem_id'),
-    )
+    __table_args__ = (Index("ix_quest_progress_user_problem", "user_id", "problem_id"),)
 
 
 class ProblemSolution(Base):
     """Cached AI-generated solutions for problems."""
+
     __tablename__ = "problem_solutions"
 
     id = Column(Integer, primary_key=True, index=True)
     problem_id = Column(Integer, unique=True, index=True, nullable=False)
     solution = Column(Text, nullable=False)  # AI-generated solution code
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class Problem(Base):
     """Problem model for coding challenges."""
+
     __tablename__ = "problems"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -95,33 +100,39 @@ class Problem(Base):
     # Playground visualization
     playground_enabled = Column(Boolean, default=False)
     playground_code = Column(Text, nullable=True)  # React component code
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class QuestReasoning(Base):
     """Cached AI-generated reasoning for quest problems."""
+
     __tablename__ = "quest_reasonings"
 
     id = Column(Integer, primary_key=True, index=True)
     problem_id = Column(Integer, unique=True, index=True, nullable=False)
-    reasoning_data = Column(Text, nullable=False)  # JSON: {steps: [{step, title, reasoning}], summary}
-    created_at = Column(DateTime, default=datetime.utcnow)
+    reasoning_data = Column(
+        Text, nullable=False
+    )  # JSON: {steps: [{step, title, reasoning}], summary}
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     created_by = Column(Integer, nullable=True)  # User ID who first generated it
 
 
 class ReasoningExport(Base):
     """Cached AI-generated exports (markdown/LaTeX) for reasoning."""
+
     __tablename__ = "reasoning_exports"
 
     id = Column(Integer, primary_key=True, index=True)
     problem_id = Column(Integer, index=True, nullable=False)
-    export_type = Column(String(20), nullable=False)  # 'markdown', 'latex', 'latex_sonnet'
+    export_type = Column(
+        String(20), nullable=False
+    )  # 'markdown', 'latex', 'latex_sonnet'
     content = Column(Text, nullable=False)  # The generated markdown or LaTeX content
     ai_model = Column(String(50), nullable=True)  # e.g. 'pplx_alpha', 'sonnet'
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     created_by = Column(Integer, nullable=True)  # User ID who first generated it
-    
+
     # Index for querying exports by problem and type
     __table_args__ = (
-        Index('ix_reasoning_export_problem_type', 'problem_id', 'export_type'),
+        Index("ix_reasoning_export_problem_type", "problem_id", "export_type"),
     )

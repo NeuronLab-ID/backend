@@ -5,6 +5,7 @@ AI-powered solution generator using the AI Provider pattern.
 from typing import Optional
 from loguru import logger
 from app.services.ai_providers import get_provider
+from app.prompts import get_solution_system_prompt, get_solution_prompt
 
 
 async def generate_solution(problem: dict) -> Optional[str]:
@@ -35,32 +36,12 @@ async def generate_solution(problem: dict) -> Optional[str]:
                 ]
             )
 
-        system_prompt = """You are an expert Python programmer. Generate a clean, working solution for the given problem.
+        system_prompt = get_solution_system_prompt()
 
-Rules:
-- Write ONLY the Python code, no explanations
-- Use the exact function signature provided
-- Make sure the solution passes all test cases
-- Keep the code clean and readable
-- Add brief inline comments for key logic"""
-
-        prompt = f"""Problem: {problem_title}
-Description: {problem_desc}
-
-Starter Code:
-```python
-{starter_code}
-```
-
-Example:
-- Input: {example.get("input", "")}
-- Output: {example.get("output", "")}
-- Reasoning: {example.get("reasoning", "")}
-
-Test Cases:
-{test_info}
-
-Generate a complete, working solution:"""
+        examples = [example] if example else []
+        prompt = get_solution_prompt(
+            problem_title, problem_desc, starter_code, examples, test_info
+        )
 
         solution = await provider.generate_reasoning(
             prompt=prompt, system_prompt=system_prompt
