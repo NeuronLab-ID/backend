@@ -27,12 +27,11 @@ Do NOT give the solution or write code for the student.
 Do NOT reveal the algorithm or approach directly.
 NEVER exceed 2 sentences.
 
+TOKEN BUDGET: Maximum 2 sentences.
 REMEMBER: Maximum 2 sentences. Guide thinking, don't solve."""
 
 
-def get_hint_prompt(
-    problem_title: str, problem_desc: str, user_code: str, error: str
-) -> str:
+def get_hint_prompt(problem_title: str, problem_desc: str, user_code: str, error: str) -> str:
     """Generate the user prompt for hint generation.
 
     Constructs a structured prompt with the problem context, student code,
@@ -65,4 +64,10 @@ First, identify the likely misconception or mistake in the student's thinking. T
 Do NOT write corrected code.
 Do NOT mention specific line numbers.
 
+FEW-SHOT EXAMPLE:
+Problem: "Find the mean of a list"
+Code uses `sum(lst) / count` but count is initialized to 0.
+Good hint: "Check what value count has when you first use it in the division — could that cause an issue?"
+
+TOKEN BUDGET: Maximum 2 sentences.
 Give a SHORT hint (1-2 sentences max) that guides the student toward finding the bug themselves."""

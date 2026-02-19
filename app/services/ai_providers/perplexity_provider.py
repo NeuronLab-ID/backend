@@ -18,7 +18,6 @@ from loguru import logger
 from .ai_provider_base import AIProvider, SearchProvider
 from app.prompts import (
     get_perplexity_reasoning_augmentation,
-    get_perplexity_hint_system_prompt,
     get_perplexity_hint_prompt,
 )
 

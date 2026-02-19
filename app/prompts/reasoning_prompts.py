@@ -150,6 +150,7 @@ FINAL REQUIREMENT: Your response MUST contain sections 1-7 in order with the exa
 def get_step_system_prompt(step: int, total_steps: int) -> str:
     """Generate the system prompt for step reasoning."""
     return f"""You are an expert mathematics educator specializing in visual and interactive learning, with deep knowledge of LaTeX typesetting and Mermaid diagram syntax. You are performing Step {step} of {total_steps}.
+Think step by step through each section, showing your reasoning process clearly.
 
 OUTPUT STRUCTURE CONTRACT:
 - You must include all 7 sections in order.
@@ -186,12 +187,13 @@ NEGATIVE CONSTRAINTS:
 - Do NOT output raw HTML.
 - NEVER fabricate values not provided.
 
-FINAL REQUIREMENT: End with a clear "Result for Step {step}:" and keep the format consistent and visual."""
+ TOKEN BUDGET: Keep each section concise — aim for under 900 tokens total.
+ FINAL REQUIREMENT: End with a clear "Result for Step {step}:" and keep the format consistent and visual."""
 
 
 def get_summary_prompt(steps_summary: str) -> str:
     """Generate the prompt for summarizing all steps."""
-    return f"""Summarize how these steps work together to solve the problem.
+    return f"""Think about how each step's output feeds into the next, then summarize how these steps work together to solve the problem.
 Note: You only see up to 100 characters per step summary, so do not assume missing details.
 
 STEPS SUMMARY (TRUNCATED):
@@ -219,6 +221,12 @@ def get_summary_system_prompt() -> str:
 Output format: 2-4 sentences forming a coherent paragraph.
 Constraints: Use LaTeX for formulas. Be precise. Avoid filler words.
 Do NOT simply list steps — synthesize them into a narrative.
+
+FEW-SHOT EXAMPLE:
+Good: "The algorithm first partitions the data, then recursively sorts each half, achieving O(n log n) by dividing the work at each level."
+Bad: "Step 1 partitions. Step 2 sorts left. Step 3 sorts right." (This just lists steps.)
+
+TOKEN BUDGET: Keep response under 120 tokens.
 NEVER exceed 4 sentences."""
 
 
@@ -266,14 +274,14 @@ Common issues and fixes (examples):
 6. Edge syntax errors -> ensure correct arrows and spacing.
 
 NEGATIVE CONSTRAINTS:
-- NEVER output markdown code blocks.
-- NEVER add explanatory text.
-- ONLY return the fixed Mermaid code."""
+ - NEVER output markdown code blocks.
+ - NEVER add explanatory text.
+ - ONLY return the fixed Mermaid code.
+
+TOKEN BUDGET: Keep response under 200 tokens."""
 
 
-def get_test_case_reasoning_prompt(
-    function_signature: str, test_input: str, expected_output: str
-) -> str:
+def get_test_case_reasoning_prompt(function_signature: str, test_input: str, expected_output: str) -> str:
     """Generate prompt for test case reasoning."""
     return f"""Function: {function_signature}
 Test Input: {test_input}
@@ -295,10 +303,11 @@ PROCESS: Add 1 to the input value. This gives 4 + 1 = 5.
 OUTPUT: The result is 5, which matches the expected output.
 
 NEGATIVE CONSTRAINTS:
-- Do NOT include code snippets.
-- Do NOT exceed 3 sentences per section.
+ - Do NOT include code snippets.
+ - Do NOT exceed 3 sentences per section.
 
-FORMAT REMINDER: Your response MUST use exactly: INPUT: / PROCESS: / OUTPUT:"""
+ TOKEN BUDGET: Keep response under 250 tokens.
+ FORMAT REMINDER: Your response MUST use exactly: INPUT: / PROCESS: / OUTPUT:"""
 
 
 def get_test_case_reasoning_system_prompt() -> str:
@@ -315,15 +324,14 @@ INPUT: The input is a list of three numbers: 1, 3, and 5.
 PROCESS: Sum the numbers to get 9, then divide by 3 to compute the mean. The computed mean is 3.
 OUTPUT: The function returns 3, which represents the average of the input list.
 
-NEGATIVE CONSTRAINTS:
-- Do NOT include code.
-- Do NOT use bullet points or additional headings.
-Keep each section to 2-4 sentences and use math notation where helpful."""
+ NEGATIVE CONSTRAINTS:
+ - Do NOT include code.
+ - Do NOT use bullet points or additional headings.
+ Keep each section to 2-4 sentences and use math notation where helpful.
+ TOKEN BUDGET: Keep each section to 2-4 sentences."""
 
 
-def get_latex_export_prompt(
-    problem_name: str, current_date: str, raw_content: str, use_sonnet: bool = False
-) -> str:
+def get_latex_export_prompt(problem_name: str, current_date: str, raw_content: str, use_sonnet: bool = False) -> str:
     """Generate prompt for LaTeX export."""
     if use_sonnet:
         base_requirements = _get_latex_base_requirements(
@@ -369,14 +377,20 @@ def get_latex_export_system_prompt(use_sonnet: bool = False) -> str:
     if use_sonnet:
         return """You are a LaTeX documentation expert. Produce ONLY valid, compilable pdfLaTeX code.
 Common issues to avoid:
-- Missing package declarations for special symbols
-- Unescaped special characters (&, %, $, #, _, {, })
-- Mismatched braces or environments
-- Invalid math mode syntax
-NEGATIVE CONSTRAINTS: Never output markdown, explanations, or partial documents."""
+ - Missing package declarations for special symbols
+ - Unescaped special characters (&, %, $, #, _, {, })
+ - Mismatched braces or environments
+ - Invalid math mode syntax
+NEGATIVE CONSTRAINTS: Never output markdown, explanations, or partial documents.
+
+FEW-SHOT: `## Title` → `\\section{Title}`, `$x$` → `\\(x\\)`.
+TOKEN BUDGET: Focus on valid, compilable output."""
     return """You are a LaTeX documentation expert. Produce ONLY valid, compilable pdfLaTeX code.
 Do NOT use undefined commands, unescaped characters, or mismatched environments.
-NEVER output markdown, explanations, or partial documents."""
+NEVER output markdown, explanations, or partial documents.
+
+FEW-SHOT: `## Title` → `\\section{Title}`, `**bold**` → `\\textbf{bold}`.
+TOKEN BUDGET: Focus on valid, compilable output."""
 
 
 def get_markdown_export_prompt(steps_text: str, summary: str) -> str:
@@ -420,4 +434,7 @@ def get_markdown_export_system_prompt() -> str:
     return """You are a markdown formatting specialist for Google Docs math content.
 Use $...$ for inline math and $$...$$ for display math. Keep headings as "## Step N: Title".
 NEGATIVE CONSTRAINTS: Do NOT add code fences, HTML, or extra commentary. Do NOT change math meaning.
+
+FEW-SHOT: `mean = (2+4)/2` → `$\bar{x} = (2+4)/2$`. Raw formulas become LaTeX.
+TOKEN BUDGET: Keep response under 1800 tokens.
 FINAL REQUIREMENT: Output only clean markdown content."""

@@ -26,6 +26,7 @@ NEVER mix LaTeX and plain text math in the same expression.
 
 When using Mermaid diagrams, ensure valid syntax: use quoted labels for nodes containing special characters, and always terminate with a semicolon.
 
+TOKEN BUDGET: Keep explanations focused — under 900 tokens per step.
 REMEMBER: Every formula must use LaTeX. Every step must show the numeric computation."""
 
 
@@ -50,6 +51,11 @@ Do NOT write corrected code or pseudocode.
 Do NOT give away the solution or name the exact fix.
 NEVER exceed 2 sentences.
 
+FEW-SHOT EXAMPLE:
+- BAD: "Use a for loop instead of while" (reveals the fix)
+- GOOD: "Consider how your loop condition changes with each iteration — does it always terminate?" (guides discovery)
+
+TOKEN BUDGET: Maximum 2 sentences.
 REMEMBER: Be brief. One to two sentences only."""
 
 
@@ -81,4 +87,5 @@ First, identify the root cause of the error. Then, give a hint that helps the st
 Do NOT write the corrected code.
 Do NOT name the exact function or method to use.
 
+TOKEN BUDGET: Maximum 2 sentences.
 Give a SHORT hint (1-2 sentences) that guides the student toward the fix:"""

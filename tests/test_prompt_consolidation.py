@@ -15,7 +15,6 @@ Tests ensure:
 """
 
 import ast
-import importlib
 import pytest
 
 
@@ -130,9 +129,7 @@ class TestNoInlinePrompts:
                 if any(keyword in s.lower() for keyword in prompt_keywords):
                     inline_prompts.append(s[:100] + "...")
 
-        assert not inline_prompts, (
-            f"Found inline prompts in {filepath}: {inline_prompts}"
-        )
+        assert not inline_prompts, f"Found inline prompts in {filepath}: {inline_prompts}"
 
     def test_solution_generator_no_inline_prompts(self):
         """Verify no inline prompts remain in solution_generator.py.
@@ -155,9 +152,7 @@ class TestNoInlinePrompts:
                 if any(keyword in s.lower() for keyword in prompt_keywords):
                     inline_prompts.append(s[:100] + "...")
 
-        assert not inline_prompts, (
-            f"Found inline prompts in {filepath}: {inline_prompts}"
-        )
+        assert not inline_prompts, f"Found inline prompts in {filepath}: {inline_prompts}"
 
     def test_perplexity_provider_no_inline_hint_prompts(self):
         """Verify no inline hint prompts remain in perplexity_provider.py.
@@ -181,9 +176,7 @@ class TestNoInlinePrompts:
                 if any(pattern in s.lower() for pattern in hint_patterns):
                     inline_hint_prompts.append(s[:100] + "...")
 
-        assert not inline_hint_prompts, (
-            f"Found inline hint prompts in {filepath}: {inline_hint_prompts}"
-        )
+        assert not inline_hint_prompts, f"Found inline hint prompts in {filepath}: {inline_hint_prompts}"
 
     def test_perplexity_search_prompt_untouched(self):
         """Verify that the search() method's inline prompt is still present.
@@ -196,9 +189,7 @@ class TestNoInlinePrompts:
             content = f.read()
 
         # The search prompt should still be present
-        assert "Search for educational resources" in content, (
-            "search() method's inline prompt should still be present"
-        )
+        assert "Search for educational resources" in content, "search() method's inline prompt should still be present"
 
 
 class TestPromptModules:
@@ -213,18 +204,16 @@ class TestPromptModules:
             assert hasattr(app.prompts.hint_prompts, "get_hint_system_prompt"), (
                 "hint_prompts should have get_hint_system_prompt"
             )
-            assert hasattr(app.prompts.hint_prompts, "get_hint_prompt"), (
-                "hint_prompts should have get_hint_prompt"
-            )
+            assert hasattr(app.prompts.hint_prompts, "get_hint_prompt"), "hint_prompts should have get_hint_prompt"
         except ImportError as e:
             pytest.fail(f"Failed to import app.prompts.hint_prompts: {e}")
 
         try:
             import app.prompts.solution_prompts
 
-            assert hasattr(
-                app.prompts.solution_prompts, "get_solution_system_prompt"
-            ), "solution_prompts should have get_solution_system_prompt"
+            assert hasattr(app.prompts.solution_prompts, "get_solution_system_prompt"), (
+                "solution_prompts should have get_solution_system_prompt"
+            )
             assert hasattr(app.prompts.solution_prompts, "get_solution_prompt"), (
                 "solution_prompts should have get_solution_prompt"
             )
@@ -234,14 +223,14 @@ class TestPromptModules:
         try:
             import app.prompts.provider_prompts
 
-            assert hasattr(
-                app.prompts.provider_prompts, "get_perplexity_reasoning_augmentation"
-            ), "provider_prompts should have get_perplexity_reasoning_augmentation"
-            assert hasattr(
-                app.prompts.provider_prompts, "get_perplexity_hint_system_prompt"
-            ), "provider_prompts should have get_perplexity_hint_system_prompt"
-            assert hasattr(
-                app.prompts.provider_prompts, "get_perplexity_hint_prompt"
-            ), "provider_prompts should have get_perplexity_hint_prompt"
+            assert hasattr(app.prompts.provider_prompts, "get_perplexity_reasoning_augmentation"), (
+                "provider_prompts should have get_perplexity_reasoning_augmentation"
+            )
+            assert hasattr(app.prompts.provider_prompts, "get_perplexity_hint_system_prompt"), (
+                "provider_prompts should have get_perplexity_hint_system_prompt"
+            )
+            assert hasattr(app.prompts.provider_prompts, "get_perplexity_hint_prompt"), (
+                "provider_prompts should have get_perplexity_hint_prompt"
+            )
         except ImportError as e:
             pytest.fail(f"Failed to import app.prompts.provider_prompts: {e}")

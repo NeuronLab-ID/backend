@@ -23,6 +23,11 @@ Do NOT over-engineer — use the simplest approach that works.
 NEVER use global variables.
 Do NOT import libraries unless absolutely necessary.
 
+FEW-SHOT EXAMPLE (good output):
+def add(a: int, b: int) -> int:
+    return a + b
+
+TOKEN BUDGET: Focus on clean, minimal code — no commentary.
 Output ONLY the Python function. No explanation, no markdown."""
 
 
@@ -86,4 +91,6 @@ Do NOT wrap the code in markdown code fences.
 Do NOT include import statements unless the problem requires a specific library.
 NEVER add a main block or test code.
 
+TOKEN BUDGET: Output only the function body — no extra text.
+REMEMBER: Output ONLY the Python function. No markdown, no explanation.
 Generate a complete, working solution:"""
