@@ -10,16 +10,19 @@ from app.routes.hints import router as hints_router
 from app.routes.users import router as users_router
 from app.routes.math_samples import router as math_samples_router
 from app.routes.cookies import router as cookies_router
+from app.routes.exports import router as exports_router
 
 # Aggregate all routers
 api_router = APIRouter()
 api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
 api_router.include_router(problems_router, prefix="/problems", tags=["problems"])
 api_router.include_router(execution_router, tags=["execution"])
-api_router.include_router(submissions_router, prefix="/submissions", tags=["submissions"])
+api_router.include_router(
+    submissions_router, prefix="/submissions", tags=["submissions"]
+)
 api_router.include_router(quests_router, tags=["quests"])
 api_router.include_router(hints_router, tags=["hints"])
 api_router.include_router(users_router, prefix="/user", tags=["users"])
 api_router.include_router(math_samples_router, tags=["math"])
 api_router.include_router(cookies_router, tags=["cookies"])
-
+api_router.include_router(exports_router, tags=["exports"])

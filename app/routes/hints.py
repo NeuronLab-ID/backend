@@ -1,35 +1,45 @@
 """
 AI hint generation routes.
 """
+
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 import json
 
-from app.config import PROBLEMS_DIR
 from app.database import get_db
 from app.routes.auth import get_current_user
 from app.models.db import Quest
 from app.models.schemas import HintRequest, QuestHintRequest
-from app.services.hint_generator import generate_hint
+from app.services.ai_providers import get_provider
+from app.repositories.problem_repository import ProblemRepository
+from app.dependencies import get_problem_repo
 
 router = APIRouter()
 
 
 @router.post("/hint")
-async def get_hint_endpoint(request: HintRequest, user_id: int = Depends(get_current_user)):
+async def get_hint_endpoint(
+    request: HintRequest,
+    user_id: int = Depends(get_current_user),
+    repo: ProblemRepository = Depends(get_problem_repo),
+):
     """Get AI hint for an error (requires auth)."""
-    problem_file = PROBLEMS_DIR / f"problem_{request.problem_id:04d}.json"
+    problem = repo.get_by_id(request.problem_id)
 
-    if not problem_file.exists():
+    if not problem:
         raise HTTPException(404, "Problem not found")
 
-    with open(problem_file, "r", encoding="utf-8") as f:
-        problem = json.load(f)
+    # Convert ORM object to dict for AI provider
+    problem_data = {
+        "title": problem.title,
+        "description": problem.description,
+        "starter_code": problem.starter_code,
+        "test_cases": json.loads(problem.test_cases) if problem.test_cases else [],
+    }
 
-    hint = await generate_hint(
-        problem=problem,
-        user_code=request.code,
-        error=request.error
+    provider = get_provider()
+    hint = await provider.generate_hint(
+        problem=problem_data, user_code=request.code, error=request.error
     )
 
     return {"hint": hint}
@@ -39,7 +49,7 @@ async def get_hint_endpoint(request: HintRequest, user_id: int = Depends(get_cur
 async def get_quest_hint(
     request: QuestHintRequest,
     user_id: int = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get AI hint for a quest exercise (requires auth)."""
     quest = db.query(Quest).filter(Quest.problem_id == request.problem_id).first()
@@ -60,13 +70,12 @@ async def get_quest_hint(
         "title": sub_quest.get("title", f"Step {request.step}"),
         "description": exercise.get("description", ""),
         "function_signature": exercise.get("function_signature", ""),
-        "hint": sub_quest.get("hint", "")
+        "hint": sub_quest.get("hint", ""),
     }
 
-    hint = await generate_hint(
-        problem=context,
-        user_code=request.code,
-        error=request.error
+    provider = get_provider()
+    hint = await provider.generate_hint(
+        problem=context, user_code=request.code, error=request.error
     )
 
     return {"hint": hint}

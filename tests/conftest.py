@@ -15,7 +15,7 @@ from app.services.auth_service import hash_password, create_access_token
 
 
 # In-memory SQLite for tests
-TEST_DATABASE_URL = "sqlite:///./test.db"
+TEST_DATABASE_URL = "sqlite://"
 test_engine = create_engine(
     TEST_DATABASE_URL, connect_args={"check_same_thread": False}
 )

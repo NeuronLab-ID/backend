@@ -4,5 +4,11 @@ from app.controllers.quest_controller import (
     create_quest,
     check_quest_exists,
 )
+from app.controllers.reasoning_controller import ReasoningController
 
-__all__ = ["QuestController", "create_quest", "check_quest_exists"]
+__all__ = [
+    "QuestController",
+    "ReasoningController",
+    "create_quest",
+    "check_quest_exists",
+]

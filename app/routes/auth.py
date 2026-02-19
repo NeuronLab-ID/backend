@@ -53,11 +53,6 @@ async def register(
     return UserResponse(
         id=user.id, username=user.username, email=user.email, created_at=user.created_at
     )
-    user = repo.create(user)
-
-    return UserResponse(
-        id=user.id, username=user.username, email=user.email, created_at=user.created_at
-    )
 
 
 @router.post("/login", response_model=Token)

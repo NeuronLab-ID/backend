@@ -3,12 +3,10 @@ Problem listing and details routes.
 """
 
 from fastapi import APIRouter, HTTPException, Query, Depends
-from sqlalchemy.orm import Session
 from typing import Optional
 import json
 
-from app.database import get_db
-from app.models.db import Problem, ProblemSolution
+from app.models.db import Problem
 from app.models.schemas import ProblemListResponse, ProblemSummary
 from app.routes.auth import get_current_user
 from app.repositories.problem_repository import ProblemRepository
@@ -104,16 +102,11 @@ async def get_problem(
 async def get_solution(
     problem_id: int,
     user_id: int = Depends(get_current_user),
-    db: Session = Depends(get_db),
     repo: ProblemRepository = Depends(get_problem_repo),
 ):
     """Get AI-generated solution for a problem (requires auth, cached in database)."""
     # Check if solution exists in database
-    cached = (
-        db.query(ProblemSolution)
-        .filter(ProblemSolution.problem_id == problem_id)
-        .first()
-    )
+    cached = repo.get_solution_by_problem_id(problem_id)
     if cached:
         return {"solution": cached.solution, "cached": True}
 
@@ -138,8 +131,6 @@ async def get_solution(
         raise HTTPException(500, "Failed to generate solution")
 
     # Cache in database
-    new_solution = ProblemSolution(problem_id=problem_id, solution=solution)
-    db.add(new_solution)
-    db.commit()
+    repo.save_solution(problem_id=problem_id, solution=solution)
 
     return {"solution": solution, "cached": False}

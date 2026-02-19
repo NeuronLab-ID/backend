@@ -14,6 +14,7 @@ from app.repositories.quest_repository import QuestRepository
 from app.repositories.user_repository import UserRepository
 from app.services.user_stats_service import UserStatsService
 from app.controllers import QuestController
+from app.controllers.reasoning_controller import ReasoningController
 
 
 # Repository providers
@@ -45,3 +46,7 @@ def get_user_stats_service(db: Session = Depends(get_db)) -> UserStatsService:
 # Controller providers
 def get_quest_controller(db: Session = Depends(get_db)) -> QuestController:
     return QuestController(db)
+
+
+def get_reasoning_controller(db: Session = Depends(get_db)) -> ReasoningController:
+    return ReasoningController(db)

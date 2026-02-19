@@ -5,8 +5,7 @@ This is the refactored slim version that delegates to controllers and services.
 Original: 1162 lines -> Refactored: ~130 lines
 """
 
-from fastapi import APIRouter, HTTPException, Depends
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -19,7 +18,8 @@ from app.models.schemas import (
     FixMermaidRequest,
 )
 from app.controllers import QuestController, create_quest, check_quest_exists
-from app.dependencies import get_quest_controller
+from app.controllers.reasoning_controller import ReasoningController
+from app.dependencies import get_quest_controller, get_reasoning_controller
 from app.services.reasoning_service import (
     fix_mermaid_code,
     generate_test_case_reasoning,
@@ -75,10 +75,9 @@ async def check_quest_exists_route(
 async def save_quest_progress(
     request: QuestProgressSaveRequest,
     user_id: int = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    controller: QuestController = Depends(get_quest_controller),
 ):
     """Save progress for a quest step."""
-    controller = QuestController(db)
     return await controller.save_progress(
         user_id, request.problem_id, request.step, request.code
     )
@@ -108,10 +107,10 @@ async def generate_test_case_reasoning_route(
 async def get_full_reasoning(
     problem_id: int,
     user_id: int = Depends(get_current_user),
-    controller: QuestController = Depends(get_quest_controller),
+    reasoning: ReasoningController = Depends(get_reasoning_controller),
 ):
     """Get cached full reasoning for a problem if it exists."""
-    return controller.get_cached_reasoning(problem_id)
+    return reasoning.get_cached_reasoning(problem_id)
 
 
 @router.get("/quest/full-reasoning/{problem_id}/stream")
@@ -121,10 +120,10 @@ async def stream_full_reasoning(
     usePerplexity: bool = False,
     usePerplexityReasoning: bool = False,
     user_id: int = Depends(get_current_user),
-    controller: QuestController = Depends(get_quest_controller),
+    reasoning: ReasoningController = Depends(get_reasoning_controller),
 ):
     """Generate and stream full reasoning for all quest steps using SSE."""
-    return await controller.stream_full_reasoning(
+    return await reasoning.stream_full_reasoning(
         problem_id, user_id, force, usePerplexity, usePerplexityReasoning
     )
 
@@ -136,39 +135,3 @@ async def fix_mermaid_code_route(
     """Use AI to fix invalid Mermaid diagram code."""
     fixed_code = await fix_mermaid_code(request.code, request.error)
     return {"fixed_code": fixed_code}
-
-
-@router.post("/quest/export-markdown/{problem_id}")
-async def export_reasoning_markdown(
-    problem_id: int,
-    use_ai: bool = False,
-    force: bool = False,
-    user_id: int = Depends(get_current_user),
-    controller: QuestController = Depends(get_quest_controller),
-):
-    """Export reasoning as formatted markdown."""
-    return await controller.export_markdown(problem_id, user_id, use_ai, force)
-
-
-@router.post("/quest/export-latex/{problem_id}")
-async def export_reasoning_latex(
-    problem_id: int,
-    useSonnet: bool = False,
-    force: bool = False,
-    user_id: int = Depends(get_current_user),
-    controller: QuestController = Depends(get_quest_controller),
-):
-    """Export reasoning as valid LaTeX document."""
-    return await controller.export_latex(problem_id, user_id, useSonnet, force)
-
-
-@router.post("/quest/export-notebook/{problem_id}")
-async def export_reasoning_notebook(
-    problem_id: int,
-    useSonnet: bool = False,
-    force: bool = False,
-    user_id: int = Depends(get_current_user),
-    controller: QuestController = Depends(get_quest_controller),
-):
-    """Export reasoning as Jupyter notebook."""
-    return await controller.export_notebook(problem_id, user_id, useSonnet, force)
