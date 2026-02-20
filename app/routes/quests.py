@@ -5,6 +5,7 @@ This is the refactored slim version that delegates to controllers and services.
 Original: 1162 lines -> Refactored: ~130 lines
 """
 
+from typing import Optional
 from fastapi import APIRouter, Depends
 from starlette.requests import Request
 from sqlalchemy.orm import Session
@@ -118,11 +119,14 @@ async def stream_full_reasoning(
     force: bool = False,
     usePerplexity: bool = False,
     usePerplexityReasoning: bool = False,
+    model: Optional[str] = None,
     user_id: int = Depends(get_current_user),
     reasoning: ReasoningController = Depends(get_reasoning_controller),
 ):
     """Generate and stream full reasoning for all quest steps using SSE."""
-    return await reasoning.stream_full_reasoning(problem_id, user_id, force, usePerplexity, usePerplexityReasoning)
+    return await reasoning.stream_full_reasoning(
+        problem_id, user_id, force, usePerplexity, usePerplexityReasoning, model
+    )
 
 
 @router.post("/fix-mermaid")

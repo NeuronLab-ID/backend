@@ -61,15 +61,19 @@ def get_search_provider() -> Optional[SearchProvider]:
     return None
 
 
-def get_reasoning_provider(use_perplexity: bool = False) -> AIProvider:
+def get_reasoning_provider(use_perplexity: bool = False, model: Optional[str] = None) -> AIProvider:
     """
     Get the appropriate provider for reasoning generation.
 
-    Priority: REASONING_PROVIDER env var > use_perplexity param > default (openai)
+    Priority: Perplexity > explicit model param > REASONING_MODEL env var > default (openai)
+
+    Args:
+        use_perplexity: Use Perplexity provider if configured
+        model: Explicit model override (takes priority over REASONING_MODEL env var)
 
     Env vars:
         REASONING_PROVIDER: "openai" or "perplexity" (overrides use_perplexity param)
-        REASONING_MODEL: Model name for reasoning (only used when provider is openai)
+        REASONING_MODEL: Model name for reasoning (only used when provider is openai and model param is not provided)
     """
     # Env var takes priority over function parameter
     env_provider = os.getenv("REASONING_PROVIDER", "").lower()
@@ -80,7 +84,14 @@ def get_reasoning_provider(use_perplexity: bool = False) -> AIProvider:
             return perplexity
         print("[Provider] Perplexity not configured, falling back to OpenAI")
 
-    # Check for custom reasoning model
+    # Check for explicit model parameter (highest priority after Perplexity)
+    if model:
+        cache_key = f"openai-reasoning-{model}"
+        if cache_key not in _providers:
+            _providers[cache_key] = OpenAIProvider(model=model)
+        return _providers[cache_key]
+
+    # Check for custom reasoning model from env var
     reasoning_model = os.getenv("REASONING_MODEL")
     if reasoning_model:
         # Create/cache a separate OpenAI instance with the reasoning model

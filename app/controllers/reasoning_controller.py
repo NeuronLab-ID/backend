@@ -3,6 +3,7 @@
 
 import json
 import asyncio
+from typing import Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
@@ -38,6 +39,7 @@ class ReasoningController:
         force: bool = False,
         use_perplexity: bool = False,
         use_perplexity_reasoning: bool = False,
+        model: Optional[str] = None,
     ) -> StreamingResponse:
         """Generate and stream full reasoning for all quest steps."""
         # Check for cached reasoning
@@ -69,6 +71,7 @@ class ReasoningController:
                 sub_quests,
                 use_perplexity,
                 use_perplexity_reasoning,
+                model,
             ),
             media_type="text/event-stream",
         )
@@ -101,12 +104,14 @@ class ReasoningController:
         sub_quests: list,
         use_perplexity: bool,
         use_perplexity_reasoning: bool,
+        model: Optional[str] = None,
     ):
         """Generate reasoning stream."""
         try:
             service = ReasoningService(
                 use_perplexity=use_perplexity,
                 use_perplexity_reasoning=use_perplexity_reasoning,
+                model=model,
             )
 
             complete_data = None

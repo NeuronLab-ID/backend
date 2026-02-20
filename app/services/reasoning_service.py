@@ -3,7 +3,7 @@
 
 import json
 import asyncio
-from typing import AsyncIterator
+from typing import AsyncIterator, Optional
 
 from app.services import get_provider, get_search_provider, get_reasoning_provider
 from app.prompts import (
@@ -22,7 +22,7 @@ class ReasoningService:
     """Service for generating AI reasoning for quest steps."""
 
     def __init__(
-        self, use_perplexity: bool = False, use_perplexity_reasoning: bool = False
+        self, use_perplexity: bool = False, use_perplexity_reasoning: bool = False, model: Optional[str] = None
     ):
         """
         Initialize the reasoning service.
@@ -30,12 +30,11 @@ class ReasoningService:
         Args:
             use_perplexity: Use Perplexity for web search references
             use_perplexity_reasoning: Use Perplexity with Claude 4.5 Sonnet for reasoning
+            model: Explicit model override for reasoning provider
         """
         self.use_perplexity = use_perplexity
         self.use_perplexity_reasoning = use_perplexity_reasoning
-        self.reasoning_provider = get_reasoning_provider(
-            use_perplexity=use_perplexity_reasoning
-        )
+        self.reasoning_provider = get_reasoning_provider(use_perplexity=use_perplexity_reasoning, model=model)
         self.search_provider = get_search_provider() if use_perplexity else None
 
     async def generate_step_reasoning(
@@ -54,10 +53,7 @@ class ReasoningService:
     ) -> str:
         """Generate reasoning for a single step."""
         formulas_text = "\n".join(
-            [
-                f"- {f.get('name', '')}: {f.get('latex', '')} ({f.get('description', '')})"
-                for f in key_formulas
-            ]
+            [f"- {f.get('name', '')}: {f.get('latex', '')} ({f.get('description', '')})" for f in key_formulas]
         )
 
         prompt = get_step_reasoning_prompt(
@@ -76,33 +72,20 @@ class ReasoningService:
 
         system_prompt = get_step_system_prompt(step, total_steps)
 
-        reasoning = await self.reasoning_provider.generate_reasoning(
-            prompt, system_prompt
-        )
-        return (
-            reasoning if reasoning else f"[Error generating reasoning for step {step}]"
-        )
+        reasoning = await self.reasoning_provider.generate_reasoning(prompt, system_prompt)
+        return reasoning if reasoning else f"[Error generating reasoning for step {step}]"
 
     async def generate_summary(self, all_steps: list) -> str:
         """Generate a summary connecting all steps."""
-        steps_summary = "\n".join(
-            [
-                f"Step {s['step']}: {s['title']} - {s['reasoning'][:100]}..."
-                for s in all_steps
-            ]
-        )
+        steps_summary = "\n".join([f"Step {s['step']}: {s['title']} - {s['reasoning'][:100]}..." for s in all_steps])
 
         prompt = get_summary_prompt(steps_summary)
         system_prompt = get_summary_system_prompt()
 
-        summary = await self.reasoning_provider.generate_reasoning(
-            prompt, system_prompt
-        )
+        summary = await self.reasoning_provider.generate_reasoning(prompt, system_prompt)
         return summary if summary else "[Error generating summary]"
 
-    async def search_web_references(
-        self, quest_data: dict, sub_quests: list
-    ) -> tuple[str, str]:
+    async def search_web_references(self, quest_data: dict, sub_quests: list) -> tuple[str, str]:
         """
         Perform a single web search covering all steps.
 
@@ -113,16 +96,8 @@ class ReasoningService:
             return "", ""
 
         all_titles = [sq.get("title", f"Step {sq.get('step', 0)}") for sq in sub_quests]
-        all_relations = [
-            sq.get("relation_to_problem", "")
-            for sq in sub_quests
-            if sq.get("relation_to_problem")
-        ]
-        main_topic = (
-            quest_data.get("title", "")
-            or quest_data.get("problem_title", "")
-            or all_titles[0]
-        )
+        all_relations = [sq.get("relation_to_problem", "") for sq in sub_quests if sq.get("relation_to_problem")]
+        main_topic = quest_data.get("title", "") or quest_data.get("problem_title", "") or all_titles[0]
 
         search_topic = f"{main_topic}: {', '.join(all_titles[:3])}"
         search_context = f"""This is a multi-step problem covering:
@@ -144,9 +119,7 @@ Each step should build on the previous step's results using this consistent data
 
         return "", ""
 
-    async def stream_full_reasoning(
-        self, quest_data: dict, sub_quests: list
-    ) -> AsyncIterator[dict]:
+    async def stream_full_reasoning(self, quest_data: dict, sub_quests: list) -> AsyncIterator[dict]:
         """
         Stream reasoning generation for all quest steps.
 
@@ -158,14 +131,8 @@ Each step should build on the previous step's results using this consistent data
         # Step 0: Web search
         web_references = ""
         if self.search_provider:
-            all_titles = [
-                sq.get("title", f"Step {sq.get('step', 0)}") for sq in sub_quests
-            ]
-            main_topic = (
-                quest_data.get("title", "")
-                or quest_data.get("problem_title", "")
-                or all_titles[0]
-            )
+            all_titles = [sq.get("title", f"Step {sq.get('step', 0)}") for sq in sub_quests]
+            main_topic = quest_data.get("title", "") or quest_data.get("problem_title", "") or all_titles[0]
             search_topic = f"{main_topic}: {', '.join(all_titles[:3])}"
 
             yield {
@@ -173,9 +140,7 @@ Each step should build on the previous step's results using this consistent data
                 "data": {"step": 0, "topic": f"Searching: {search_topic[:50]}..."},
             }
 
-            search_result, web_references = await self.search_web_references(
-                quest_data, sub_quests
-            )
+            search_result, web_references = await self.search_web_references(quest_data, sub_quests)
 
             if search_result:
                 yield {"type": "search_result", "data": {"content": search_result}}
@@ -259,9 +224,7 @@ async def fix_mermaid_code(code: str, error: str) -> str:
         fixed_code = fixed_code.strip()
         if fixed_code.startswith("```"):
             lines = fixed_code.split("\n")
-            fixed_code = "\n".join(
-                lines[1:-1] if lines[-1].startswith("```") else lines[1:]
-            )
+            fixed_code = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
 
         return fixed_code
 
@@ -269,9 +232,7 @@ async def fix_mermaid_code(code: str, error: str) -> str:
         return code
 
 
-async def generate_test_case_reasoning(
-    function_signature: str, test_input: str, expected_output: str
-) -> dict:
+async def generate_test_case_reasoning(function_signature: str, test_input: str, expected_output: str) -> dict:
     """Generate step-by-step reasoning for a test case."""
     from app.services.ai_providers import get_provider
 
@@ -279,9 +240,7 @@ async def generate_test_case_reasoning(
         provider = get_provider()
 
         content = await provider.generate_reasoning(
-            prompt=get_test_case_reasoning_prompt(
-                function_signature, test_input, expected_output
-            ),
+            prompt=get_test_case_reasoning_prompt(function_signature, test_input, expected_output),
             system_prompt=get_test_case_reasoning_system_prompt(),
         )
 
@@ -316,8 +275,7 @@ async def generate_test_case_reasoning(
 
         return {
             "input": input_section.strip() or f"Input: {test_input}",
-            "process": process_section.strip()
-            or "Processing the input to compute the result.",
+            "process": process_section.strip() or "Processing the input to compute the result.",
             "output": output_section.strip() or f"Expected output: {expected_output}",
         }
 
