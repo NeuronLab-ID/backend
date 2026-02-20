@@ -36,13 +36,26 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     """Initialize database and container pool on startup."""
     create_tables()
-    # Start container pool
+
+    # Start container pool (non-fatal — app works without Docker, code execution degrades gracefully)
     from app.services.executor import container_pool
 
-    await container_pool.start()
+    try:
+        await container_pool.start()
+    except Exception as exc:
+        logger.warning(
+            "Docker is unavailable — code execution will be disabled. "
+            "Start Docker Desktop and restart the server to enable it. Error: %s",
+            exc,
+        )
+
     yield
-    # Shutdown container pool
-    await container_pool.shutdown()
+
+    # Shutdown container pool (safe even if it never started)
+    try:
+        await container_pool.shutdown()
+    except Exception as exc:
+        logger.warning("Error shutting down container pool: %s", exc)
 
 
 app = FastAPI(
