@@ -16,6 +16,7 @@ services:
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       - sandbox-builder
+      - manim-builder
 
   sandbox-builder:
     build:
@@ -23,3 +24,11 @@ services:
       dockerfile: Dockerfile
     image: deepml-sandbox:latest
     command: echo "Sandbox image built"
+
+  manim-builder:
+    build:
+      context: ./sandbox-manim
+      dockerfile: Dockerfile
+    image: deepml-sandbox-manim:latest
+    command: echo "Manim sandbox image built"
+
