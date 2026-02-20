@@ -79,6 +79,9 @@ class TestPromptExports:
             "get_perplexity_reasoning_augmentation",
             "get_perplexity_hint_system_prompt",
             "get_perplexity_hint_prompt",
+            # Manim prompts
+            "get_manim_code_system_prompt",
+            "get_manim_code_prompt",
         }
 
         actual_exports = set(app.prompts.__all__)
