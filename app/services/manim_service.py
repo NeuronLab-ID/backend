@@ -49,7 +49,7 @@ class ManimService:
                 problem_title=problem_title,
                 problem_description=problem_description,
             )
-            manim_code = await self.provider.generate(prompt, system_prompt)
+            manim_code = await self.provider.generate_reasoning(prompt, system_prompt)
 
             animation = self.repository.create(problem_id, step_number, manim_code)
             self.repository.update_status(animation.id, "rendering")

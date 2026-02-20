@@ -9,7 +9,7 @@ from app.services.manim_service import ManimService
 def test_generate_animation_success() -> None:
     manim_code = "from manim import *\nclass MainScene(Scene):\n    pass"
     mock_provider = MagicMock()
-    mock_provider.generate = AsyncMock(return_value=manim_code)
+    mock_provider.generate_reasoning = AsyncMock(return_value=manim_code)
 
     mock_repo = MagicMock()
     animation = MagicMock()
@@ -46,7 +46,7 @@ def test_generate_animation_success() -> None:
 def test_generate_animation_render_failure() -> None:
     manim_code = "from manim import *\nclass MainScene(Scene):\n    pass"
     mock_provider = MagicMock()
-    mock_provider.generate = AsyncMock(return_value=manim_code)
+    mock_provider.generate_reasoning = AsyncMock(return_value=manim_code)
 
     mock_repo = MagicMock()
     animation = MagicMock()
@@ -81,7 +81,7 @@ def test_generate_animation_render_failure() -> None:
 
 def test_generate_all_animations() -> None:
     mock_provider = MagicMock()
-    mock_provider.generate = AsyncMock(return_value="code")
+    mock_provider.generate_reasoning = AsyncMock(return_value="code")
     mock_repo = MagicMock()
 
     with (
@@ -138,7 +138,7 @@ def test_get_animation_delegates() -> None:
 
 def test_generate_animation_ai_failure() -> None:
     mock_provider = MagicMock()
-    mock_provider.generate = AsyncMock(side_effect=Exception("boom"))
+    mock_provider.generate_reasoning = AsyncMock(side_effect=Exception("boom"))
     mock_repo = MagicMock()
 
     with (
