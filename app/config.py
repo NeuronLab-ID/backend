@@ -38,6 +38,14 @@ SANDBOX_MAX_EXECUTIONS = int(os.getenv("SANDBOX_MAX_EXECUTIONS", "50"))  # per c
 SANDBOX_PIDS_LIMIT = int(os.getenv("SANDBOX_PIDS_LIMIT", "50"))
 SANDBOX_CODE_MAX_LENGTH = int(os.getenv("SANDBOX_CODE_MAX_LENGTH", "50000"))  # 50KB
 
+# Manim Animation Configuration
+MANIM_SANDBOX_IMAGE = os.getenv("MANIM_SANDBOX_IMAGE", "deepml-sandbox-manim:latest")
+MANIM_RENDER_QUALITY = os.getenv("MANIM_RENDER_QUALITY", "l")  # l/m/h/k (low/medium/high/4K)
+MANIM_GPU_ENABLED = os.getenv("MANIM_GPU_ENABLED", "false").lower() == "true"
+MANIM_TIMEOUT = int(os.getenv("MANIM_TIMEOUT", "120"))  # seconds per render
+MANIM_OUTPUT_DIR = Path(os.getenv("MANIM_OUTPUT_DIR", str(BASE_DIR / "media" / "manim")))
+MANIM_MAX_CONCURRENT_RENDERS = int(os.getenv("MANIM_MAX_CONCURRENT_RENDERS", "3"))
+
 # Feature flags
 LOCAL_DEV = os.getenv("LOCAL_DEV", "false").lower() == "true"
 

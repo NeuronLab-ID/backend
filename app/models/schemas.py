@@ -3,7 +3,7 @@ Pydantic schemas for API requests and responses.
 """
 
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Literal
 from datetime import datetime
 
 
@@ -33,6 +33,12 @@ class UserResponse(BaseModel):
     created_at: datetime
 
 
+class UserUpdate(BaseModel):
+    display_name: Optional[str] = Field(None, max_length=100)
+    bio: Optional[str] = Field(None, max_length=500)
+    avatar_url: Optional[str] = Field(None, max_length=500)
+
+
 # ========== Problem Schemas ==========
 
 
@@ -55,6 +61,7 @@ class ProblemListResponse(BaseModel):
 class ExecuteRequest(BaseModel):
     problem_id: int
     code: str = Field(..., max_length=50000)
+    framework: Optional[Literal["pytorch", "tinygrad", "cuda"]] = "pytorch"
 
 
 class TestResult(BaseModel):
@@ -150,3 +157,31 @@ class QuestReasoningRequest(BaseModel):
 class FixMermaidRequest(BaseModel):
     code: str
     error: str
+
+
+# ========== Manim Schemas ==========
+
+
+class ManimGenerateRequest(BaseModel):
+    problem_id: int
+    step_number: Optional[int] = None  # None = generate all steps
+
+
+class ManimAnimationResponse(BaseModel):
+    id: int
+    problem_id: int
+    step_number: int
+    status: str
+    video_url: Optional[str] = None
+    error_message: Optional[str] = None
+    render_time_ms: Optional[int] = None
+    created_at: datetime
+
+
+class ManimStatusResponse(BaseModel):
+    problem_id: int
+    animations: List[ManimAnimationResponse]
+    total_steps: int
+    completed_count: int
+    rendering_count: int
+    error_count: int

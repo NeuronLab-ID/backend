@@ -19,6 +19,11 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
+    # Profile fields
+    display_name = Column(String(100), nullable=True)
+    bio = Column(Text, nullable=True)
+    avatar_url = Column(String(500), nullable=True)
+
 
 class Submission(Base):
     """Submission model for tracking user progress."""
@@ -110,9 +115,7 @@ class QuestReasoning(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     problem_id = Column(Integer, unique=True, index=True, nullable=False)
-    reasoning_data = Column(
-        Text, nullable=False
-    )  # JSON: {steps: [{step, title, reasoning}], summary}
+    reasoning_data = Column(Text, nullable=False)  # JSON: {steps: [{step, title, reasoning}], summary}
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     created_by = Column(Integer, nullable=True)  # User ID who first generated it
 
@@ -124,15 +127,30 @@ class ReasoningExport(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     problem_id = Column(Integer, index=True, nullable=False)
-    export_type = Column(
-        String(20), nullable=False
-    )  # 'markdown', 'latex', 'latex_sonnet'
+    export_type = Column(String(20), nullable=False)  # 'markdown', 'latex', 'latex_sonnet'
     content = Column(Text, nullable=False)  # The generated markdown or LaTeX content
     ai_model = Column(String(50), nullable=True)  # e.g. 'pplx_alpha', 'sonnet'
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     created_by = Column(Integer, nullable=True)  # User ID who first generated it
 
     # Index for querying exports by problem and type
-    __table_args__ = (
-        Index("ix_reasoning_export_problem_type", "problem_id", "export_type"),
-    )
+    __table_args__ = (Index("ix_reasoning_export_problem_type", "problem_id", "export_type"),)
+
+
+class ManimAnimation(Base):
+    """Cached manim animation renders for reasoning steps."""
+
+    __tablename__ = "manim_animations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    problem_id = Column(Integer, index=True, nullable=False)
+    step_number = Column(Integer, nullable=False)
+    status = Column(String(20), nullable=False, default="pending")  # pending, rendering, completed, error
+    manim_code = Column(Text, nullable=True)
+    video_path = Column(String(500), nullable=True)
+    error_message = Column(Text, nullable=True)
+    render_time_ms = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (Index("ix_manim_animation_problem_step", "problem_id", "step_number"),)

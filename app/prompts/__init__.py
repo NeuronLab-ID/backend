@@ -33,6 +33,10 @@ from app.prompts.provider_prompts import (
     get_perplexity_hint_system_prompt,
     get_perplexity_hint_prompt,
 )
+from app.prompts.manim_prompts import (
+    get_manim_code_system_prompt,
+    get_manim_code_prompt,
+)
 
 __all__ = [
     # Reasoning prompts
@@ -64,4 +68,7 @@ __all__ = [
     "get_perplexity_reasoning_augmentation",
     "get_perplexity_hint_system_prompt",
     "get_perplexity_hint_prompt",
+    # Manim prompts
+    "get_manim_code_system_prompt",
+    "get_manim_code_prompt",
 ]
