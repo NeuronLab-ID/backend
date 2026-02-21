@@ -19,7 +19,7 @@ def test_generate_animation_success() -> None:
 
     with (
         patch("app.services.manim_service.ManimRepository", return_value=mock_repo),
-        patch("app.services.manim_service.get_provider", return_value=mock_provider),
+        patch("app.services.manim_service.get_reasoning_provider", return_value=mock_provider),
         patch("app.services.manim_service.manim_executor") as mock_executor,
     ):
         mock_executor.render = AsyncMock(return_value={"status": "success", "video_path": "video.mp4"})
@@ -56,7 +56,7 @@ def test_generate_animation_render_failure() -> None:
 
     with (
         patch("app.services.manim_service.ManimRepository", return_value=mock_repo),
-        patch("app.services.manim_service.get_provider", return_value=mock_provider),
+        patch("app.services.manim_service.get_reasoning_provider", return_value=mock_provider),
         patch("app.services.manim_service.manim_executor") as mock_executor,
     ):
         mock_executor.render = AsyncMock(return_value={"status": "error", "error": "boom"})
@@ -86,7 +86,7 @@ def test_generate_all_animations() -> None:
 
     with (
         patch("app.services.manim_service.ManimRepository", return_value=mock_repo),
-        patch("app.services.manim_service.get_provider", return_value=mock_provider),
+        patch("app.services.manim_service.get_reasoning_provider", return_value=mock_provider),
     ):
         service = ManimService(MagicMock())
         service.generate_animation = AsyncMock(side_effect=["anim1", "anim2"])
@@ -111,7 +111,7 @@ def test_get_animation_status_delegates() -> None:
 
     with (
         patch("app.services.manim_service.ManimRepository", return_value=mock_repo),
-        patch("app.services.manim_service.get_provider", return_value=MagicMock()),
+        patch("app.services.manim_service.get_reasoning_provider", return_value=MagicMock()),
     ):
         service = ManimService(MagicMock())
         result = service.get_animation_status(3, 2)
@@ -127,7 +127,7 @@ def test_get_animation_delegates() -> None:
 
     with (
         patch("app.services.manim_service.ManimRepository", return_value=mock_repo),
-        patch("app.services.manim_service.get_provider", return_value=MagicMock()),
+        patch("app.services.manim_service.get_reasoning_provider", return_value=MagicMock()),
     ):
         service = ManimService(MagicMock())
         result = service.get_animation(9, 4)
@@ -143,7 +143,7 @@ def test_generate_animation_ai_failure() -> None:
 
     with (
         patch("app.services.manim_service.ManimRepository", return_value=mock_repo),
-        patch("app.services.manim_service.get_provider", return_value=mock_provider),
+        patch("app.services.manim_service.get_reasoning_provider", return_value=mock_provider),
     ):
         service = ManimService(MagicMock())
         reasoning_data = {

@@ -14,7 +14,7 @@ from app.prompts import (
     get_manim_code_system_prompt,
 )
 from app.repositories.manim_repository import ManimRepository
-from app.services import get_provider
+from app.services import get_reasoning_provider
 from app.services.manim_executor import manim_executor
 
 logger = get_logger(__name__)
@@ -47,7 +47,7 @@ def _strip_code_fences(code: str) -> str:
 class ManimService:
     def __init__(self, db: Session) -> None:
         self.repository: ManimRepository = ManimRepository(db)
-        self.provider: Any = get_provider()
+        self.provider: Any = get_reasoning_provider()
 
     async def generate_animation(
         self,
