@@ -3,10 +3,10 @@
 FROM manimcommunity/manim:stable
 
 # Install additional LaTeX packages for math formulas
+# texlive-fonts-extra omitted (~624MB) — base image already has sufficient fonts
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-latex-extra \
-    texlive-fonts-extra \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy runner script
