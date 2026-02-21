@@ -211,6 +211,9 @@ class TestManimRepositoryGetStatusSummary:
         assert summary["rendering_count"] == 0
         assert summary["error_count"] == 0
         assert summary["pending_count"] == 3
+        assert "animations" in summary
+        assert len(summary["animations"]) == 3
+        assert all(a["status"] == "pending" for a in summary["animations"])
 
     def test_get_status_summary_mixed_statuses(self, manim_repo):
         """Test summary with mixed statuses."""
@@ -233,6 +236,10 @@ class TestManimRepositoryGetStatusSummary:
         assert summary["rendering_count"] == 1
         assert summary["error_count"] == 1
         assert summary["pending_count"] == 1
+        assert "animations" in summary
+        assert len(summary["animations"]) == 4
+        # Verify animations are sorted by step_number
+        assert [a["step_number"] for a in summary["animations"]] == [1, 2, 3, 4]
 
     def test_get_status_summary_no_animations(self, manim_repo):
         """Test summary when no animations exist."""
@@ -244,6 +251,8 @@ class TestManimRepositoryGetStatusSummary:
         assert summary["rendering_count"] == 0
         assert summary["error_count"] == 0
         assert summary["pending_count"] == 0
+        assert "animations" in summary
+        assert summary["animations"] == []
 
     def test_get_status_summary_all_completed(self, manim_repo):
         """Test summary when all animations are completed."""
@@ -259,6 +268,9 @@ class TestManimRepositoryGetStatusSummary:
         assert summary["rendering_count"] == 0
         assert summary["error_count"] == 0
         assert summary["pending_count"] == 0
+        assert "animations" in summary
+        assert len(summary["animations"]) == 2
+        assert all(a["status"] == "completed" for a in summary["animations"])
 
     def test_get_status_summary_ignores_other_problems(self, manim_repo):
         """Test that summary only counts animations for the specified problem."""
@@ -274,3 +286,39 @@ class TestManimRepositoryGetStatusSummary:
         assert summary["completed_count"] == 1
         assert summary["rendering_count"] == 0
         assert summary["pending_count"] == 0
+        assert "animations" in summary
+        assert len(summary["animations"]) == 1
+        assert summary["animations"][0]["problem_id"] == 1
+
+    def test_get_status_summary_animation_structure(self, manim_repo):
+        """Test that animation dicts have correct structure and field mapping."""
+        anim = manim_repo.create(1, 1, "code1")
+        manim_repo.update_status(anim.id, "completed", video_path="/videos/test.mp4", render_time_ms=5000)
+
+        summary = manim_repo.get_status_summary(1, 1)
+
+        assert len(summary["animations"]) == 1
+        animation_dict = summary["animations"][0]
+
+        # Verify all required fields exist
+        assert "id" in animation_dict
+        assert "problem_id" in animation_dict
+        assert "step_number" in animation_dict
+        assert "status" in animation_dict
+        assert "video_url" in animation_dict
+        assert "error_message" in animation_dict
+        assert "render_time_ms" in animation_dict
+        assert "created_at" in animation_dict
+
+        # Verify field values and mapping
+        assert animation_dict["id"] == anim.id
+        assert animation_dict["problem_id"] == 1
+        assert animation_dict["step_number"] == 1
+        assert animation_dict["status"] == "completed"
+        assert animation_dict["video_url"] == "/videos/test.mp4"  # Mapped from video_path
+        assert animation_dict["error_message"] is None
+        assert animation_dict["render_time_ms"] == 5000
+        assert animation_dict["created_at"] is not None
+        # Verify created_at is ISO 8601 string
+        assert isinstance(animation_dict["created_at"], str)
+        assert "T" in animation_dict["created_at"]

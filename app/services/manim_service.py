@@ -1,3 +1,4 @@
+import re
 import time
 from typing import Any
 
@@ -17,6 +18,30 @@ from app.services import get_provider
 from app.services.manim_executor import manim_executor
 
 logger = get_logger(__name__)
+
+
+def _strip_code_fences(code: str) -> str:
+    """Strip markdown code fences from AI-generated code.
+
+    Removes leading ```python or ``` and trailing ``` from code strings.
+    Handles edge cases: None/empty input, code without fences, multiple blocks.
+
+    Args:
+        code: Raw code string potentially wrapped in markdown fences.
+
+    Returns:
+        Clean code with fences removed. Returns empty string if input is None/empty.
+    """
+    if not code:
+        return ""
+
+    # Strip leading fence: ^\s*```(?:python)?\s*\n
+    code = re.sub(r"^\s*```(?:python)?\s*\n", "", code)
+
+    # Strip trailing fence: \n\s*```\s*$
+    code = re.sub(r"\n\s*```\s*$", "", code)
+
+    return code
 
 
 class ManimService:
@@ -50,6 +75,7 @@ class ManimService:
                 problem_description=problem_description,
             )
             manim_code = await self.provider.generate_reasoning(prompt, system_prompt)
+            manim_code = _strip_code_fences(manim_code or "")
 
             animation = self.repository.create(problem_id, step_number, manim_code)
             self.repository.update_status(animation.id, "rendering")

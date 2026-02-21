@@ -59,7 +59,7 @@ class ManimRepository:
 
         return animation
 
-    def get_status_summary(self, problem_id: int, total_steps: int) -> dict[str, int]:
+    def get_status_summary(self, problem_id: int, total_steps: int) -> dict[str, object]:
         """Get status summary for all animations of a problem."""
         animations = self.get_by_problem_id(problem_id)
 
@@ -68,6 +68,22 @@ class ManimRepository:
         error_count = sum(1 for a in animations if a.status == "error")
         pending_count = sum(1 for a in animations if a.status == "pending")
 
+        # Serialize animations sorted by step_number
+        animations_sorted = sorted(animations, key=lambda a: a.step_number)
+        animations_list = [
+            {
+                "id": a.id,
+                "problem_id": a.problem_id,
+                "step_number": a.step_number,
+                "status": a.status,
+                "video_url": a.video_path,
+                "error_message": a.error_message,
+                "render_time_ms": a.render_time_ms,
+                "created_at": a.created_at.isoformat() if a.created_at else None,
+            }
+            for a in animations_sorted
+        ]
+
         return {
             "problem_id": problem_id,
             "total_steps": total_steps,
@@ -75,4 +91,5 @@ class ManimRepository:
             "rendering_count": rendering_count,
             "error_count": error_count,
             "pending_count": pending_count,
+            "animations": animations_list,
         }

@@ -3,7 +3,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.manim_service import ManimService
+from app.services.manim_service import ManimService, _strip_code_fences
 
 
 def test_generate_animation_success() -> None:
@@ -157,3 +157,46 @@ def test_generate_animation_ai_failure() -> None:
             asyncio.get_event_loop().run_until_complete(service.generate_animation(1, 1, reasoning_data))
 
     mock_repo.create.assert_not_called()
+
+
+def test_strip_code_fences_with_python_fence() -> None:
+    """Test stripping ```python wrapped code."""
+    code_with_fence = """```python
+from manim import *
+class MainScene(Scene):
+    def construct(self):
+        pass
+```"""
+    expected = """from manim import *
+class MainScene(Scene):
+    def construct(self):
+        pass"""
+    assert _strip_code_fences(code_with_fence) == expected
+
+
+def test_strip_code_fences_with_generic_fence() -> None:
+    """Test stripping ``` (no language) wrapped code."""
+    code_with_fence = """```
+from manim import *
+class MainScene(Scene):
+    pass
+```"""
+    expected = """from manim import *
+class MainScene(Scene):
+    pass"""
+    assert _strip_code_fences(code_with_fence) == expected
+
+
+def test_strip_code_fences_with_clean_code() -> None:
+    """Test that clean code (no fences) is returned unchanged."""
+    clean_code = """from manim import *
+class MainScene(Scene):
+    def construct(self):
+        pass"""
+    assert _strip_code_fences(clean_code) == clean_code
+
+
+def test_strip_code_fences_with_empty_string() -> None:
+    """Test that empty string returns empty string."""
+    assert _strip_code_fences("") == ""
+    assert _strip_code_fences(None or "") == ""
