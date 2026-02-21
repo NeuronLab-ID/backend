@@ -22,7 +22,9 @@ class ManimController:
         self.quest_repository = QuestRepository(db)
         self.manim_service = ManimService(db)
 
-    async def generate_animation(self, problem_id: int, step_number: int | None, user_id: int) -> dict:
+    async def generate_animation(
+        self, problem_id: int, step_number: int | None, user_id: int, video_type: str | None = None
+    ) -> dict:
         """Generate animation(s) for a problem's reasoning steps."""
         reasoning = self.quest_repository.get_reasoning(problem_id)
         if not reasoning:
@@ -32,7 +34,9 @@ class ManimController:
         steps = reasoning_data.get("steps", [])
 
         if step_number is None:
-            animations = await self.manim_service.generate_all_animations(problem_id, reasoning_data)
+            animations = await self.manim_service.generate_all_animations(
+                problem_id, reasoning_data, video_type=video_type
+            )
             return {
                 "problem_id": problem_id,
                 "animations": [
@@ -41,6 +45,7 @@ class ManimController:
                         "status": a.status,
                         "video_path": a.video_path,
                         "render_time_ms": a.render_time_ms,
+                        "video_type": a.video_type,
                     }
                     for a in animations
                 ],
@@ -61,14 +66,37 @@ class ManimController:
             "problem_description": reasoning_data.get("problem_description", ""),
         }
 
-        animation = await self.manim_service.generate_animation(problem_id, step_number, step_data)
-        return {
-            "problem_id": problem_id,
-            "step_number": animation.step_number,
-            "status": animation.status,
-            "video_path": animation.video_path,
-            "render_time_ms": animation.render_time_ms,
-        }
+        if video_type is None:
+            # Generate both types for this step
+            animations = []
+            for vtype in ["visualization", "calculation"]:
+                animation = await self.manim_service.generate_animation(
+                    problem_id, step_number, step_data, video_type=vtype
+                )
+                animations.append(
+                    {
+                        "problem_id": problem_id,
+                        "step_number": animation.step_number,
+                        "status": animation.status,
+                        "video_path": animation.video_path,
+                        "render_time_ms": animation.render_time_ms,
+                        "video_type": animation.video_type,
+                    }
+                )
+            return {"animations": animations}
+        else:
+            # Generate only the specified type
+            animation = await self.manim_service.generate_animation(
+                problem_id, step_number, step_data, video_type=video_type
+            )
+            return {
+                "problem_id": problem_id,
+                "step_number": animation.step_number,
+                "status": animation.status,
+                "video_path": animation.video_path,
+                "render_time_ms": animation.render_time_ms,
+                "video_type": animation.video_type,
+            }
 
     def get_animation_status(self, problem_id: int) -> dict:
         """Get animation status for all steps of a problem."""
@@ -82,9 +110,9 @@ class ManimController:
 
         return self.manim_service.get_animation_status(problem_id, total_steps)
 
-    def get_video_path(self, problem_id: int, step_number: int) -> Path:
+    def get_video_path(self, problem_id: int, step_number: int, video_type: str = "calculation") -> Path:
         """Get the video file path for a completed animation."""
-        animation = self.manim_service.get_animation(problem_id, step_number)
+        animation = self.manim_service.get_animation(problem_id, step_number, video_type=video_type)
         if not animation:
             raise HTTPException(404, "Animation not found")
         if animation.status != "completed":

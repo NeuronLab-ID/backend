@@ -67,7 +67,9 @@ class ManimExecutor:
                 raise
         return self._client
 
-    async def render(self, manim_code: str, problem_id: int, step_number: int) -> dict[str, object]:
+    async def render(
+        self, manim_code: str, problem_id: int, step_number: int, video_type: str = "calculation"
+    ) -> dict[str, object]:
         start_time = time.time()
         container = None
         async with self._semaphore:
@@ -117,7 +119,7 @@ class ManimExecutor:
 
                     local_dir = os.path.join(str(MANIM_OUTPUT_DIR), str(problem_id))
                     os.makedirs(local_dir, exist_ok=True)
-                    local_path = os.path.join(local_dir, f"step_{step_number}.mp4")
+                    local_path = os.path.join(local_dir, f"step_{step_number}_{video_type}.mp4")
 
                     stream, _ = await _to_thread(container.get_archive, video_path)
                     tar_data = b"".join(stream)

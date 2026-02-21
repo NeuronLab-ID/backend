@@ -51,7 +51,7 @@ def test_generate_success(client, auth_headers):
         assert data["status"] == "completed"
         assert data["problem_id"] == 1
         mock_controller.generate_animation.assert_awaited_once_with(
-            1, 1, mock_controller.generate_animation.await_args[0][2]
+            1, 1, mock_controller.generate_animation.await_args[0][2], None
         )
     finally:
         del app.dependency_overrides[get_manim_controller]
@@ -131,7 +131,7 @@ def test_video_success(client, auth_headers, tmp_path):
         response = client.get("/api/manim/video/1/1", headers=auth_headers)
         assert response.status_code == 200
         assert response.headers["content-type"] == "video/mp4"
-        mock_controller.get_video_path.assert_called_once_with(1, 1)
+        mock_controller.get_video_path.assert_called_once_with(1, 1, "calculation")
     finally:
         del app.dependency_overrides[get_manim_controller]
 
@@ -170,5 +170,59 @@ def test_generate_reasoning_not_found(client, auth_headers):
             headers=auth_headers,
         )
         assert response.status_code == 404
+    finally:
+        del app.dependency_overrides[get_manim_controller]
+
+
+def test_generate_with_video_type(client, auth_headers):
+    """POST /api/manim/generate with video_type passes it to the controller."""
+    from app.dependencies import get_manim_controller
+    from main import app
+
+    mock_controller = MagicMock()
+    mock_controller.generate_animation = AsyncMock(
+        return_value={
+            "problem_id": 1,
+            "step_number": 1,
+            "status": "completed",
+            "video_type": "visualization",
+        }
+    )
+
+    app.dependency_overrides[get_manim_controller] = lambda: mock_controller
+    try:
+        response = client.post(
+            "/api/manim/generate",
+            json={"problem_id": 1, "step_number": 1, "video_type": "visualization"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["video_type"] == "visualization"
+        # The controller should receive video_type as the 4th argument
+        call_args = mock_controller.generate_animation.await_args
+        assert call_args[0][0] == 1  # problem_id
+        assert call_args[0][1] == 1  # step_number
+        assert call_args[0][3] == "visualization"  # video_type
+    finally:
+        del app.dependency_overrides[get_manim_controller]
+
+
+def test_video_with_type_query_param(client, auth_headers, tmp_path):
+    """GET /api/manim/video/1/1?type=visualization passes video_type to controller."""
+    from app.dependencies import get_manim_controller
+    from main import app
+
+    video_file = tmp_path / "step_1_visualization.mp4"
+    video_file.write_bytes(b"\x00\x00\x00\x1cftypisom")
+
+    mock_controller = MagicMock()
+    mock_controller.get_video_path.return_value = video_file
+
+    app.dependency_overrides[get_manim_controller] = lambda: mock_controller
+    try:
+        response = client.get("/api/manim/video/1/1?type=visualization", headers=auth_headers)
+        assert response.status_code == 200
+        mock_controller.get_video_path.assert_called_once_with(1, 1, "visualization")
     finally:
         del app.dependency_overrides[get_manim_controller]

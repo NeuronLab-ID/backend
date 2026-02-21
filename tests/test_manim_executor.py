@@ -42,7 +42,7 @@ async def test_render_success_writes_mp4(tmp_path):
         with patch("app.services.manim_executor.MANIM_OUTPUT_DIR", tmp_path):
             result = await executor.render("print('hi')", problem_id=1, step_number=2)
 
-    expected_path = tmp_path / "1" / "step_2.mp4"
+    expected_path = tmp_path / "1" / "step_2_calculation.mp4"
     assert result["status"] == "success"
     assert result["video_path"] == str(expected_path)
     assert expected_path.read_bytes() == b"mp4-data"

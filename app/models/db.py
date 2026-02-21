@@ -2,7 +2,7 @@
 SQLAlchemy database models.
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Index
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Index, UniqueConstraint
 from datetime import datetime, timezone
 
 from app.database import Base
@@ -145,6 +145,7 @@ class ManimAnimation(Base):
     id = Column(Integer, primary_key=True, index=True)
     problem_id = Column(Integer, index=True, nullable=False)
     step_number = Column(Integer, nullable=False)
+    video_type = Column(String(20), nullable=False, server_default="calculation")  # visualization, calculation
     status = Column(String(20), nullable=False, default="pending")  # pending, rendering, completed, error
     manim_code = Column(Text, nullable=True)
     video_path = Column(String(500), nullable=True)
@@ -153,4 +154,4 @@ class ManimAnimation(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=True)
 
-    __table_args__ = (Index("ix_manim_animation_problem_step", "problem_id", "step_number"),)
+    __table_args__ = (UniqueConstraint("problem_id", "step_number", "video_type", name="uq_manim_problem_step_type"),)

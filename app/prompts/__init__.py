@@ -36,6 +36,8 @@ from app.prompts.provider_prompts import (
 from app.prompts.manim_prompts import (
     get_manim_code_system_prompt,
     get_manim_code_prompt,
+    get_manim_visualization_system_prompt,
+    get_manim_visualization_prompt,
 )
 
 __all__ = [
@@ -71,4 +73,6 @@ __all__ = [
     # Manim prompts
     "get_manim_code_system_prompt",
     "get_manim_code_prompt",
+    "get_manim_visualization_system_prompt",
+    "get_manim_visualization_prompt",
 ]

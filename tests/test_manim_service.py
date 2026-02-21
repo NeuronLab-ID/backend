@@ -34,7 +34,7 @@ def test_generate_animation_success() -> None:
         result = asyncio.get_event_loop().run_until_complete(service.generate_animation(1, 2, reasoning_data))
 
     assert result == animation
-    mock_repo.create.assert_called_once_with(1, 2, manim_code)
+    mock_repo.create.assert_called_once_with(1, 2, manim_code, video_type="calculation")
     assert mock_repo.update_status.call_args_list[0].args[:2] == (animation.id, "rendering")
     assert mock_repo.update_status.call_args_list[1].args[:2] == (animation.id, "completed")
     assert mock_repo.update_status.call_args_list[1].kwargs == {
@@ -80,6 +80,7 @@ def test_generate_animation_render_failure() -> None:
 
 
 def test_generate_all_animations() -> None:
+    """When video_type=None, both visualization and calculation are generated per step."""
     mock_provider = MagicMock()
     mock_provider.generate_reasoning = AsyncMock(return_value="code")
     mock_repo = MagicMock()
@@ -89,7 +90,7 @@ def test_generate_all_animations() -> None:
         patch("app.services.manim_service.get_reasoning_provider", return_value=mock_provider),
     ):
         service = ManimService(MagicMock())
-        service.generate_animation = AsyncMock(side_effect=["anim1", "anim2"])
+        service.generate_animation = AsyncMock(side_effect=["v1", "c1", "v2", "c2"])
         reasoning_data = {
             "problem_title": "Sample",
             "problem_description": "Desc",
@@ -100,9 +101,18 @@ def test_generate_all_animations() -> None:
         }
         result = asyncio.get_event_loop().run_until_complete(service.generate_all_animations(5, reasoning_data))
 
-    assert result == ["anim1", "anim2"]
+    assert result == ["v1", "c1", "v2", "c2"]
+    assert len(service.generate_animation.call_args_list) == 4
+    # Step 1: visualization, then calculation
     assert service.generate_animation.call_args_list[0].args[0:2] == (5, 1)
-    assert service.generate_animation.call_args_list[1].args[0:2] == (5, 2)
+    assert service.generate_animation.call_args_list[0].kwargs.get("video_type") == "visualization"
+    assert service.generate_animation.call_args_list[1].args[0:2] == (5, 1)
+    assert service.generate_animation.call_args_list[1].kwargs.get("video_type") == "calculation"
+    # Step 2: visualization, then calculation
+    assert service.generate_animation.call_args_list[2].args[0:2] == (5, 2)
+    assert service.generate_animation.call_args_list[2].kwargs.get("video_type") == "visualization"
+    assert service.generate_animation.call_args_list[3].args[0:2] == (5, 2)
+    assert service.generate_animation.call_args_list[3].kwargs.get("video_type") == "calculation"
 
 
 def test_get_animation_status_delegates() -> None:
@@ -133,7 +143,7 @@ def test_get_animation_delegates() -> None:
         result = service.get_animation(9, 4)
 
     assert result == animation
-    mock_repo.get_by_problem_and_step.assert_called_once_with(9, 4)
+    mock_repo.get_by_problem_and_step.assert_called_once_with(9, 4, video_type=None)
 
 
 def test_generate_animation_ai_failure() -> None:
@@ -200,3 +210,84 @@ def test_strip_code_fences_with_empty_string() -> None:
     """Test that empty string returns empty string."""
     assert _strip_code_fences("") == ""
     assert _strip_code_fences(None or "") == ""
+
+
+def test_generate_animation_visualization_type() -> None:
+    """Test generating a visualization animation uses correct prompts and passes video_type."""
+    manim_code = "from manim import *\nclass MainScene(Scene):\n    pass"
+    mock_provider = MagicMock()
+    mock_provider.generate_reasoning = AsyncMock(return_value=manim_code)
+
+    mock_repo = MagicMock()
+    animation = MagicMock()
+    animation.id = 789
+    mock_repo.create.return_value = animation
+    mock_repo.get_by_problem_and_step.return_value = animation
+
+    with (
+        patch("app.services.manim_service.ManimRepository", return_value=mock_repo),
+        patch("app.services.manim_service.get_reasoning_provider", return_value=mock_provider),
+        patch("app.services.manim_service.manim_executor") as mock_executor,
+    ):
+        mock_executor.render = AsyncMock(return_value={"status": "success", "video_path": "video.mp4"})
+        service = ManimService(MagicMock())
+        reasoning_data = {
+            "step_title": "Intro",
+            "step_reasoning": "Explain the concept",
+            "key_formulas": [],
+            "problem_title": "Sample",
+            "problem_description": "Desc",
+        }
+        result = asyncio.get_event_loop().run_until_complete(
+            service.generate_animation(1, 2, reasoning_data, video_type="visualization")
+        )
+
+    assert result == animation
+    mock_repo.create.assert_called_once_with(1, 2, manim_code, video_type="visualization")
+
+
+def test_generate_all_animations_single_type() -> None:
+    """When video_type is specified, only that type is generated per step (not doubled)."""
+    mock_provider = MagicMock()
+    mock_provider.generate_reasoning = AsyncMock(return_value="code")
+    mock_repo = MagicMock()
+
+    with (
+        patch("app.services.manim_service.ManimRepository", return_value=mock_repo),
+        patch("app.services.manim_service.get_reasoning_provider", return_value=mock_provider),
+    ):
+        service = ManimService(MagicMock())
+        service.generate_animation = AsyncMock(side_effect=["anim1", "anim2"])
+        reasoning_data = {
+            "problem_title": "Sample",
+            "problem_description": "Desc",
+            "steps": [
+                {"title": "Step A", "reasoning": "A"},
+                {"title": "Step B", "reasoning": "B"},
+            ],
+        }
+        result = asyncio.get_event_loop().run_until_complete(
+            service.generate_all_animations(5, reasoning_data, video_type="calculation")
+        )
+
+    assert result == ["anim1", "anim2"]
+    assert len(service.generate_animation.call_args_list) == 2
+    assert service.generate_animation.call_args_list[0].kwargs.get("video_type") == "calculation"
+    assert service.generate_animation.call_args_list[1].kwargs.get("video_type") == "calculation"
+
+
+def test_get_animation_with_video_type() -> None:
+    """Test that get_animation passes video_type to the repository."""
+    mock_repo = MagicMock()
+    animation = MagicMock()
+    mock_repo.get_by_problem_and_step.return_value = animation
+
+    with (
+        patch("app.services.manim_service.ManimRepository", return_value=mock_repo),
+        patch("app.services.manim_service.get_reasoning_provider", return_value=MagicMock()),
+    ):
+        service = ManimService(MagicMock())
+        result = service.get_animation(9, 4, video_type="visualization")
+
+    assert result == animation
+    mock_repo.get_by_problem_and_step.assert_called_once_with(9, 4, video_type="visualization")

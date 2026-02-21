@@ -2,7 +2,7 @@
 Manim animation routes for generating and serving reasoning step videos.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import FileResponse
 
 from app.routes.auth import get_current_user
@@ -20,7 +20,7 @@ async def generate_manim_animation(
     controller: ManimController = Depends(get_manim_controller),
 ):
     """Generate manim animation for a problem's reasoning steps."""
-    return await controller.generate_animation(request.problem_id, request.step_number, user_id)
+    return await controller.generate_animation(request.problem_id, request.step_number, user_id, request.video_type)
 
 
 @router.get("/manim/status/{problem_id}")
@@ -37,9 +37,10 @@ async def get_manim_status(
 async def get_manim_video(
     problem_id: int,
     step_number: int,
+    type: str = Query("calculation", alias="type"),
     user_id: int = Depends(get_current_user),
     controller: ManimController = Depends(get_manim_controller),
 ):
     """Get rendered manim video file."""
-    video_path = controller.get_video_path(problem_id, step_number)
-    return FileResponse(video_path, media_type="video/mp4", filename=f"step_{step_number}.mp4")
+    video_path = controller.get_video_path(problem_id, step_number, type)
+    return FileResponse(video_path, media_type="video/mp4", filename=f"step_{step_number}_{type}.mp4")

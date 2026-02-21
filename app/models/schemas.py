@@ -159,18 +159,26 @@ class FixMermaidRequest(BaseModel):
     error: str
 
 
+class PersistMermaidFixRequest(BaseModel):
+    problem_id: int
+    original_code: str
+    fixed_code: str
+
+
 # ========== Manim Schemas ==========
 
 
 class ManimGenerateRequest(BaseModel):
     problem_id: int
     step_number: Optional[int] = None  # None = generate all steps
+    video_type: Optional[str] = None  # None = both types; "visualization" or "calculation"
 
 
 class ManimAnimationResponse(BaseModel):
     id: int
     problem_id: int
     step_number: int
+    video_type: str = "calculation"
     status: str
     video_url: Optional[str] = None
     error_message: Optional[str] = None

@@ -82,6 +82,8 @@ class TestPromptExports:
             # Manim prompts
             "get_manim_code_system_prompt",
             "get_manim_code_prompt",
+            "get_manim_visualization_system_prompt",
+            "get_manim_visualization_prompt",
         }
 
         actual_exports = set(app.prompts.__all__)

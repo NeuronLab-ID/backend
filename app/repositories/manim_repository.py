@@ -16,18 +16,39 @@ class ManimRepository:
         """Get all animations for a problem."""
         return self.db.query(ManimAnimation).filter(ManimAnimation.problem_id == problem_id).all()
 
-    def get_by_problem_and_step(self, problem_id: int, step_number: int) -> ManimAnimation | None:
-        """Get animation by problem ID and step number."""
+    def get_by_problem_and_step(
+        self, problem_id: int, step_number: int, video_type: str | None = None
+    ) -> ManimAnimation | None:
+        """Get animation by problem ID and step number. Optionally filter by video_type."""
+        query = self.db.query(ManimAnimation).filter(
+            ManimAnimation.problem_id == problem_id, ManimAnimation.step_number == step_number
+        )
+        if video_type is not None:
+            query = query.filter(ManimAnimation.video_type == video_type)
+        return query.first()
+
+    def get_by_problem_step_and_type(self, problem_id: int, step_number: int, video_type: str) -> ManimAnimation | None:
+        """Get animation by problem ID, step number, and video type."""
         return (
             self.db.query(ManimAnimation)
-            .filter(ManimAnimation.problem_id == problem_id, ManimAnimation.step_number == step_number)
+            .filter(
+                ManimAnimation.problem_id == problem_id,
+                ManimAnimation.step_number == step_number,
+                ManimAnimation.video_type == video_type,
+            )
             .first()
         )
 
-    def create(self, problem_id: int, step_number: int, manim_code: str) -> ManimAnimation:
+    def create(
+        self, problem_id: int, step_number: int, manim_code: str, video_type: str = "calculation"
+    ) -> ManimAnimation:
         """Create a new manim animation with status='pending'."""
         animation = ManimAnimation(
-            problem_id=problem_id, step_number=step_number, manim_code=manim_code, status="pending"
+            problem_id=problem_id,
+            step_number=step_number,
+            manim_code=manim_code,
+            status="pending",
+            video_type=video_type,
         )
         self.db.add(animation)
         self.db.commit()
@@ -68,8 +89,8 @@ class ManimRepository:
         error_count = sum(1 for a in animations if a.status == "error")
         pending_count = sum(1 for a in animations if a.status == "pending")
 
-        # Serialize animations sorted by step_number
-        animations_sorted = sorted(animations, key=lambda a: a.step_number)
+        # Serialize animations sorted by step_number and video_type
+        animations_sorted = sorted(animations, key=lambda a: (a.step_number, a.video_type))
         animations_list = [
             {
                 "id": a.id,
@@ -79,6 +100,7 @@ class ManimRepository:
                 "video_url": a.video_path,
                 "error_message": a.error_message,
                 "render_time_ms": a.render_time_ms,
+                "video_type": a.video_type,
                 "created_at": a.created_at.isoformat() if a.created_at else None,
             }
             for a in animations_sorted
@@ -93,3 +115,16 @@ class ManimRepository:
             "pending_count": pending_count,
             "animations": animations_list,
         }
+
+    def exists_for_step_and_type(self, problem_id: int, step_number: int, video_type: str) -> bool:
+        """Check if animation exists for problem, step, and video type."""
+        return (
+            self.db.query(ManimAnimation)
+            .filter(
+                ManimAnimation.problem_id == problem_id,
+                ManimAnimation.step_number == step_number,
+                ManimAnimation.video_type == video_type,
+            )
+            .first()
+            is not None
+        )

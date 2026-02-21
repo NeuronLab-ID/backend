@@ -47,6 +47,18 @@ class TestManimRepositoryCreate:
         assert anim3.step_number == 3
         assert anim1.problem_id == anim2.problem_id == anim3.problem_id == 1
 
+    def test_create_animation_with_video_type(self, manim_repo):
+        """Test creating an animation with explicit video_type."""
+        animation = manim_repo.create(1, 1, "code", video_type="visualization")
+
+        assert animation.video_type == "visualization"
+
+    def test_create_animation_default_video_type(self, manim_repo):
+        """Test that default video_type is 'calculation'."""
+        animation = manim_repo.create(1, 1, "code")
+
+        assert animation.video_type == "calculation"
+
 
 class TestManimRepositoryGetByProblemId:
     """Test get_by_problem_id operations."""
@@ -121,6 +133,71 @@ class TestManimRepositoryGetByProblemAndStep:
         assert animation is not None
         assert animation.problem_id == 2
         assert animation.step_number == 1
+
+    def test_get_by_problem_and_step_with_video_type(self, manim_repo):
+        """Test filtering by video_type returns the correct animation."""
+        manim_repo.create(1, 1, "calc_code", video_type="calculation")
+        manim_repo.create(1, 1, "viz_code", video_type="visualization")
+
+        animation = manim_repo.get_by_problem_and_step(1, 1, video_type="visualization")
+
+        assert animation is not None
+        assert animation.video_type == "visualization"
+        assert animation.manim_code == "viz_code"
+
+    def test_get_by_problem_and_step_without_video_type_returns_first(self, manim_repo):
+        """Test that querying without video_type returns something (not None)."""
+        manim_repo.create(1, 1, "calc_code", video_type="calculation")
+
+        animation = manim_repo.get_by_problem_and_step(1, 1)
+
+        assert animation is not None
+
+
+class TestManimRepositoryGetByProblemStepAndType:
+    """Test get_by_problem_step_and_type operations."""
+
+    def test_get_by_problem_step_and_type(self, manim_repo):
+        """Test retrieving animation by problem, step, and video type."""
+        manim_repo.create(1, 1, "viz_code", video_type="visualization")
+        manim_repo.create(1, 1, "calc_code", video_type="calculation")
+
+        viz = manim_repo.get_by_problem_step_and_type(1, 1, "visualization")
+        calc = manim_repo.get_by_problem_step_and_type(1, 1, "calculation")
+
+        assert viz is not None
+        assert viz.video_type == "visualization"
+        assert viz.manim_code == "viz_code"
+
+        assert calc is not None
+        assert calc.video_type == "calculation"
+        assert calc.manim_code == "calc_code"
+
+    def test_get_by_problem_step_and_type_not_found(self, manim_repo):
+        """Test that querying for a nonexistent type returns None."""
+        manim_repo.create(1, 1, "calc_code", video_type="calculation")
+
+        result = manim_repo.get_by_problem_step_and_type(1, 1, "visualization")
+
+        assert result is None
+
+
+class TestManimRepositoryExistsForStepAndType:
+    """Test exists_for_step_and_type operations."""
+
+    def test_exists_for_step_and_type_true(self, manim_repo):
+        """Test that exists returns True when animation exists."""
+        manim_repo.create(1, 2, "code", video_type="visualization")
+
+        result = manim_repo.exists_for_step_and_type(1, 2, "visualization")
+
+        assert result is True
+
+    def test_exists_for_step_and_type_false(self, manim_repo):
+        """Test that exists returns False when animation does not exist."""
+        result = manim_repo.exists_for_step_and_type(1, 99, "calculation")
+
+        assert result is False
 
 
 class TestManimRepositoryUpdateStatus:
@@ -322,3 +399,14 @@ class TestManimRepositoryGetStatusSummary:
         # Verify created_at is ISO 8601 string
         assert isinstance(animation_dict["created_at"], str)
         assert "T" in animation_dict["created_at"]
+
+    def test_get_status_summary_includes_video_type(self, manim_repo):
+        """Test that animation dicts in summary include the video_type field."""
+        manim_repo.create(1, 1, "viz_code", video_type="visualization")
+
+        summary = manim_repo.get_status_summary(1, 1)
+
+        assert len(summary["animations"]) == 1
+        animation_dict = summary["animations"][0]
+        assert "video_type" in animation_dict
+        assert animation_dict["video_type"] == "visualization"
