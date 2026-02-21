@@ -75,7 +75,7 @@ class ManimExecutor:
             try:
                 self._client = docker.from_env()
             except DockerException as exc:
-                logger.error("Failed to initialize Docker client: %s", exc)
+                logger.error("Failed to initialize Docker client: {}", exc)
                 raise
         return self._client
 
@@ -173,7 +173,7 @@ class ManimExecutor:
                 }
             except (DockerException, APIError) as exc:
                 elapsed_ms = int((time.time() - start_time) * 1000)
-                logger.error("Manim render failed: %s", exc)
+                logger.error("Manim render failed: {}", exc)
                 return {
                     "status": "error",
                     "error": str(exc),
@@ -181,7 +181,7 @@ class ManimExecutor:
                 }
             except Exception as exc:
                 elapsed_ms = int((time.time() - start_time) * 1000)
-                logger.error("Manim render failed: %s", exc)
+                logger.error("Manim render failed: {}", exc)
                 return {
                     "status": "error",
                     "error": str(exc),
@@ -194,7 +194,7 @@ class ManimExecutor:
                     except NotFound:
                         pass
                     except Exception as exc:
-                        logger.warning("Failed to remove manim container: %s", exc)
+                        logger.warning("Failed to remove manim container: {}", exc)
 
     async def check_docker_available(self) -> bool:
         try:
