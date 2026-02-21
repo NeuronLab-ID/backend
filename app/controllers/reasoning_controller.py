@@ -32,6 +32,38 @@ class ReasoningController:
             }
         return {"exists": False, "data": None}
 
+    def persist_mermaid_fix(self, problem_id: int, original_code: str, fixed_code: str) -> dict:
+        """Persist an AI-fixed mermaid diagram to the reasoning data."""
+        reasoning = self.repository.get_reasoning(problem_id)
+        if not reasoning:
+            raise HTTPException(404, "Reasoning not found")
+
+        data = json.loads(reasoning.reasoning_data)
+        updated = False
+
+        # Search and replace in step reasoning strings
+        mermaid_block_original = f"```mermaid\n{original_code}\n```"
+        mermaid_block_fixed = f"```mermaid\n{fixed_code}\n```"
+
+        for step in data.get("steps", []):
+            if mermaid_block_original in step.get("reasoning", ""):
+                step["reasoning"] = step["reasoning"].replace(mermaid_block_original, mermaid_block_fixed)
+                updated = True
+
+        # Also check summary and web_references
+        if data.get("summary") and mermaid_block_original in data["summary"]:
+            data["summary"] = data["summary"].replace(mermaid_block_original, mermaid_block_fixed)
+            updated = True
+
+        if data.get("web_references") and mermaid_block_original in data["web_references"]:
+            data["web_references"] = data["web_references"].replace(mermaid_block_original, mermaid_block_fixed)
+            updated = True
+
+        if updated:
+            self.repository.update_reasoning_data(problem_id, json.dumps(data))
+
+        return {"success": True, "updated": updated}
+
     async def stream_full_reasoning(
         self,
         problem_id: int,

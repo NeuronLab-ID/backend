@@ -1,20 +1,20 @@
-name: Build and Push Manim Sandbox Docker Image
+name: Build and Push Sandbox Docker Image
 
 on:
     push:
         branches:
             - master
         paths:
-            - "sandbox-manim/**"
+            - "sandbox/**"
     pull_request:
         branches:
             - master
         paths:
-            - "sandbox-manim/**"
+            - "sandbox/**"
 
 env:
     REGISTRY: ghcr.io
-    IMAGE_NAME: ${{ github.repository }}/sandbox-manim
+    IMAGE_NAME: ${{ github.repository }}/sandbox
 
 jobs:
     build:
@@ -54,7 +54,7 @@ jobs:
             - name: Build and push Docker image
               uses: docker/build-push-action@v5
               with:
-                  context: ./sandbox-manim
+                  context: ./sandbox
                   push: ${{ github.event_name != 'pull_request' }}
                   tags: ${{ steps.meta.outputs.tags }}
                   labels: ${{ steps.meta.outputs.labels }}

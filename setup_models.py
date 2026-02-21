@@ -313,6 +313,67 @@ def pick_model(
         return selection or current
 
 
+def verify_model(
+    console: Console,
+    api_key: str,
+    base_url: str,
+    model_id: str,
+    label: str,
+) -> bool:
+    """Send a tiny test prompt to verify the model responds."""
+    try:
+        with console.status(f"[bold]Verifying {label} model [cyan]{model_id}[/cyan]...", spinner="dots"):
+            client = OpenAI(api_key=api_key, base_url=base_url or None)
+            response = client.chat.completions.create(
+                model=model_id,
+                messages=[{"role": "user", "content": "Reply with the single word: OK"}],
+                max_tokens=4,
+                timeout=30,
+            )
+            content = (response.choices[0].message.content or "").strip()
+        if content:
+            console.print(f"  [bold green]✓[/bold green] {label} model [cyan]{model_id}[/cyan] responded: {content!r}")
+            return True
+        console.print(
+            f"  [bold yellow]![/bold yellow] {label} model [cyan]{model_id}[/cyan] returned an empty response."
+        )
+        return False
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"  [bold red]✗[/bold red] {label} model [cyan]{model_id}[/cyan] failed: {exc}")
+        return False
+
+
+def verify_models(
+    console: Console,
+    api_key: str,
+    base_url: str,
+    hint_model: str,
+    reasoning_model: str,
+) -> bool:
+    """Verify all selected models work. Returns True if all passed."""
+    console.print()
+    console.print("[bold]Verifying selected models...[/bold]")
+
+    hint_ok = verify_model(console, api_key, base_url, hint_model, "Hint")
+
+    # Skip duplicate check if reasoning model is the same
+    if reasoning_model == hint_model:
+        reasoning_ok = hint_ok
+        if hint_ok:
+            console.print(f"  [bold green]✓[/bold green] Reasoning model is the same — already verified.")
+    else:
+        reasoning_ok = verify_model(console, api_key, base_url, reasoning_model, "Reasoning")
+
+    if hint_ok and reasoning_ok:
+        console.print("[bold green]All models verified successfully![/bold green]")
+    else:
+        console.print(
+            "[bold yellow]Some models failed verification. You can still save, but they may not work at runtime.[/bold yellow]"
+        )
+
+    return hint_ok and reasoning_ok
+
+
 def show_summary(
     console: Console,
     api_key: str,
@@ -340,18 +401,18 @@ def main() -> None:
 
     env = read_env()
 
-    console.print("[1/3] OpenAI Connection")
+    console.print("[1/4] OpenAI Connection")
     console.print()
     api_key, base_url = prompt_connection(console, env)
     write_env({"OPENAI_API_KEY": api_key, "OPENAI_BASE_URL": base_url})
 
     console.print()
-    console.print("[2/3] Fetch Models")
+    console.print("[2/4] Fetch Models")
     console.print()
     models = fetch_models(console, api_key, base_url)
 
     console.print()
-    console.print("[3/3] Assign Models")
+    console.print("[3/4] Assign Models")
 
     hint_current = env.get("AI_MODEL", "gpt-4o-mini")
     reasoning_current = env.get("REASONING_MODEL", "") or hint_current
@@ -372,9 +433,14 @@ def main() -> None:
     )
 
     console.print()
+    console.print("[4/4] Verify Models")
+    all_ok = verify_models(console, api_key, base_url, hint_model, reasoning_model)
+
+    console.print()
     show_summary(console, api_key, base_url, hint_model, reasoning_model)
 
-    if _safe_confirm("Save to .env?", default=True):
+    save_default = all_ok
+    if _safe_confirm("Save to .env?", default=save_default):
         write_env(
             {
                 "OPENAI_API_KEY": api_key,

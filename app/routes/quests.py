@@ -18,6 +18,7 @@ from app.models.schemas import (
     QuestProgressSaveRequest,
     QuestReasoningRequest,
     FixMermaidRequest,
+    PersistMermaidFixRequest,
 )
 from app.controllers import QuestController, create_quest, check_quest_exists
 from app.controllers.reasoning_controller import ReasoningController
@@ -134,3 +135,13 @@ async def fix_mermaid_code_route(request: FixMermaidRequest, user_id: int = Depe
     """Use AI to fix invalid Mermaid diagram code."""
     fixed_code = await fix_mermaid_code(request.code, request.error)
     return {"fixed_code": fixed_code}
+
+
+@router.post("/persist-mermaid-fix")
+async def persist_mermaid_fix_route(
+    request: PersistMermaidFixRequest,
+    user_id: int = Depends(get_current_user),
+    reasoning: ReasoningController = Depends(get_reasoning_controller),
+):
+    """Persist an AI-fixed mermaid diagram to the reasoning data."""
+    return reasoning.persist_mermaid_fix(request.problem_id, request.original_code, request.fixed_code)

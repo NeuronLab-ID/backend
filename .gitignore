@@ -70,3 +70,9 @@ venv.bak/
 
 # Local config
 .env.local
+.sisyphus
+.tmp
+nul
+typings
+.claude
+media

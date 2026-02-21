@@ -31,8 +31,26 @@ async def run_code(
     if not problem:
         raise HTTPException(404, "Problem not found")
 
-    # Get test cases
-    test_cases = json.loads(problem.test_cases) if problem.test_cases else []
+    # Get test cases based on framework
+    framework = body.framework or "pytorch"
+
+    # CUDA is not available in the current sandbox
+    if framework == "cuda":
+        raise HTTPException(400, "CUDA execution not available in current sandbox")
+
+    # TinyGrad is not available in the current sandbox
+    if framework == "tinygrad":
+        raise HTTPException(400, "TinyGrad execution not available in current sandbox")
+
+    if framework == "tinygrad" and problem.tinygrad_test_cases:
+        test_cases = json.loads(problem.tinygrad_test_cases)
+    elif framework == "cuda" and problem.cuda_test_cases:
+        test_cases = json.loads(problem.cuda_test_cases)
+    elif framework == "pytorch" and problem.pytorch_test_cases:
+        test_cases = json.loads(problem.pytorch_test_cases)
+    else:
+        # Fallback to default test cases
+        test_cases = json.loads(problem.test_cases) if problem.test_cases else []
 
     # Execute code in sandbox
     result = await execute_code(code=body.code, test_cases=test_cases)
