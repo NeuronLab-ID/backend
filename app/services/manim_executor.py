@@ -4,7 +4,7 @@ import json
 import os
 import tarfile
 import time
-from typing import Any, Callable, ParamSpec, Protocol, TypeVar, cast
+from typing import Any, Callable, ParamSpec, TypeVar, cast
 
 import docker
 from docker.errors import APIError, DockerException, NotFound
@@ -22,18 +22,6 @@ logger: Any = get_logger(__name__)
 
 P = ParamSpec("P")
 T = TypeVar("T")
-
-
-class _Sock(Protocol):
-    def sendall(self, data: bytes) -> None: ...
-
-    def shutdown(self, how: int) -> None: ...
-
-
-class _SocketAdapter(Protocol):
-    _sock: _Sock
-
-    def close(self) -> None: ...
 
 
 async def _to_thread(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
@@ -102,14 +90,13 @@ class ManimExecutor:
                 )
                 await _to_thread(container.start)
 
-                socket = cast(
-                    _SocketAdapter,
-                    await _to_thread(container.attach_socket, params={"stdin": True, "stream": True}),
-                )
+                raw_socket = await _to_thread(container.attach_socket, params={"stdin": True, "stream": True})
+                # On Linux the socket wraps _sock; on Windows (NpipeSocket) methods are direct
+                sock = getattr(raw_socket, "_sock", raw_socket)
                 payload = json.dumps(input_data).encode("utf-8") + b"\n"
-                await _to_thread(socket._sock.sendall, payload)
-                await _to_thread(socket._sock.shutdown, 2)
-                _ = await _to_thread(socket.close)
+                await _to_thread(sock.sendall, payload)
+                await _to_thread(sock.shutdown, 2)
+                await _to_thread(raw_socket.close)
 
                 wait_task = _to_thread(container.wait, timeout=MANIM_TIMEOUT + 10)
                 _ = await asyncio.wait_for(wait_task, timeout=MANIM_TIMEOUT + 15)
