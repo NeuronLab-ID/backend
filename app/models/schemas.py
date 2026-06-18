@@ -2,10 +2,10 @@
 Pydantic schemas for API requests and responses.
 """
 
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, List, Any, Literal
 from datetime import datetime
+from typing import Any, Literal, Optional
 
+from pydantic import BaseModel, EmailStr, Field
 
 # ========== Auth Schemas ==========
 
@@ -51,7 +51,7 @@ class ProblemSummary(BaseModel):
 
 
 class ProblemListResponse(BaseModel):
-    problems: List[ProblemSummary]
+    problems: list[ProblemSummary]
     total: int
 
 
@@ -75,7 +75,7 @@ class TestResult(BaseModel):
 
 class ExecuteResponse(BaseModel):
     success: bool
-    results: List[TestResult] = []
+    results: list[TestResult] = []
     error: Optional[str] = None
     hint: Optional[str] = None
     execution_time: float = 0
@@ -100,7 +100,7 @@ class SaveSubmissionRequest(BaseModel):
 class ProgressResponse(BaseModel):
     solved: int
     streak: int
-    submissions: List[SubmissionResponse]
+    submissions: list[SubmissionResponse]
 
 
 # ========== Hint Schemas ==========
@@ -188,8 +188,81 @@ class ManimAnimationResponse(BaseModel):
 
 class ManimStatusResponse(BaseModel):
     problem_id: int
-    animations: List[ManimAnimationResponse]
+    animations: list[ManimAnimationResponse]
     total_steps: int
     completed_count: int
     rendering_count: int
     error_count: int
+    pending_count: int
+
+
+
+ManimBackendName = Literal["cpu", "egpu"]
+ManimVideoType = Literal["visualization", "calculation"]
+ManimJobStatus = Literal[
+    "queued",
+    "generating_code",
+    "rendering",
+    "succeeded",
+    "failed_retryable",
+    "failed_terminal",
+    "cancelling",
+    "cancelled",
+    "orphaned",
+]
+
+
+class ManimBackendInfo(BaseModel):
+    name: ManimBackendName
+    available: bool
+    default: bool = False
+    reason: Optional[str] = None
+
+
+class ManimBackendsResponse(BaseModel):
+    backends: list[ManimBackendInfo]
+    default_backend: ManimBackendName
+
+
+class ManimJobCreateRequest(BaseModel):
+    problem_id: int
+    step_number: Optional[int] = None
+    video_type: Optional[ManimVideoType] = None
+    backend: ManimBackendName = "cpu"
+    idempotency_key: Optional[str] = Field(None, max_length=128)
+
+
+class ManimJobCreateResponse(BaseModel):
+    job_id: str
+    status: ManimJobStatus
+    status_url: str
+    events_url: Optional[str] = None
+
+
+class ManimJobStatusResponse(BaseModel):
+    job_id: str
+    problem_id: int
+    step_number: Optional[int]
+    video_type: Optional[str]
+    requested_backend: str
+    resolved_backend: Optional[str]
+    status: ManimJobStatus
+    progress: int
+    attempt: int
+    max_attempts: int
+    provider: str
+    model: str
+    animation_id: Optional[int] = None
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
+    logs_tail: Optional[str] = None
+    created_at: datetime
+    queued_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    cancel_requested_at: Optional[datetime] = None
+
+
+class ManimJobActionResponse(BaseModel):
+    job_id: str
+    status: ManimJobStatus

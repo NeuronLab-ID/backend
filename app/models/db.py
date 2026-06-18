@@ -2,8 +2,9 @@
 SQLAlchemy database models.
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Index, UniqueConstraint
 from datetime import datetime, timezone
+
+from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String, Text, UniqueConstraint
 
 from app.database import Base
 
@@ -155,3 +156,39 @@ class ManimAnimation(Base):
     updated_at = Column(DateTime, nullable=True)
 
     __table_args__ = (UniqueConstraint("problem_id", "step_number", "video_type", name="uq_manim_problem_step_type"),)
+
+
+class ManimRenderJob(Base):
+    """Persisted async Manim render job lifecycle."""
+
+    __tablename__ = "manim_render_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(String(64), unique=True, index=True, nullable=False)
+    user_id = Column(Integer, index=True, nullable=False)
+    problem_id = Column(Integer, index=True, nullable=False)
+    step_number = Column(Integer, nullable=True)
+    video_type = Column(String(20), nullable=True)
+    requested_backend = Column(String(20), nullable=False, default="cpu")
+    resolved_backend = Column(String(20), nullable=True)
+    status = Column(String(32), nullable=False, default="queued", index=True)
+    progress = Column(Integer, nullable=False, default=0)
+    attempt = Column(Integer, nullable=False, default=1)
+    max_attempts = Column(Integer, nullable=False, default=2)
+    provider = Column(String(50), nullable=False, default="9router")
+    model = Column(String(100), nullable=False, default="cx/gpt-5.5-xhigh")
+    container_id = Column(String(128), nullable=True)
+    animation_id = Column(Integer, nullable=True)
+    request_hash = Column(String(64), nullable=True, index=True)
+    idempotency_key = Column(String(128), nullable=True, index=True)
+    error_code = Column(String(64), nullable=True)
+    error_message = Column(Text, nullable=True)
+    logs_tail = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    queued_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+    cancel_requested_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (Index("ix_manim_render_jobs_status_created", "status", "created_at"),)

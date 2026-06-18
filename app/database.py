@@ -34,6 +34,10 @@ def create_tables():
         QuestProgress,
         ProblemSolution,
         Problem,
+        QuestReasoning,
+        ReasoningExport,
+        ManimAnimation,
+        ManimRenderJob,
     )  # noqa
 
     Base.metadata.create_all(bind=engine)
