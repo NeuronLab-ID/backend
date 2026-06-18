@@ -10,8 +10,8 @@ from typing import Optional
 
 from .ai_provider_base import AIProvider, SearchProvider
 from .openai_provider import OpenAIProvider
+from .opencode_config import load_9router_opencode_config
 from .perplexity_provider import PerplexityProvider
-
 
 # Singleton instances
 _providers: dict[str, AIProvider] = {}
@@ -22,7 +22,7 @@ def get_provider(provider_type: Optional[str] = None) -> AIProvider:
     Get an AI provider instance.
 
     Args:
-        provider_type: "openai" or "perplexity". If None, defaults to "openai"
+        provider_type: "openai", "9router", or "perplexity". If None, defaults to "openai"
 
     Returns:
         AIProvider instance
@@ -37,6 +37,15 @@ def get_provider(provider_type: Optional[str] = None) -> AIProvider:
     # Create new provider
     if provider_type == "openai":
         provider = OpenAIProvider()
+    elif provider_type == "9router":
+        cfg = load_9router_opencode_config()
+        provider = OpenAIProvider(
+            model=cfg.model,
+            api_key=cfg.api_key,
+            base_url=cfg.base_url,
+            temperature=0.1,
+            raise_errors=True,
+        )
     elif provider_type == "perplexity":
         provider = PerplexityProvider()
     else:
@@ -72,11 +81,14 @@ def get_reasoning_provider(use_perplexity: bool = False, model: Optional[str] = 
         model: Explicit model override (takes priority over REASONING_MODEL env var)
 
     Env vars:
-        REASONING_PROVIDER: "openai" or "perplexity" (overrides use_perplexity param)
+        REASONING_PROVIDER: "openai", "9router", or "perplexity" (overrides use_perplexity param)
         REASONING_MODEL: Model name for reasoning (only used when provider is openai and model param is not provided)
     """
     # Env var takes priority over function parameter
     env_provider = os.getenv("REASONING_PROVIDER", "").lower()
+
+    if env_provider == "9router":
+        return get_provider("9router")
 
     if env_provider == "perplexity" or (not env_provider and use_perplexity):
         perplexity = get_provider("perplexity")
