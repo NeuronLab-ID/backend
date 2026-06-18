@@ -6,16 +6,17 @@ Centralized DI for repositories, services, and controllers.
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
+from app.controllers import QuestController
+from app.controllers.manim_controller import ManimController
+from app.controllers.reasoning_controller import ReasoningController
 from app.database import get_db
 from app.repositories.auth_repository import AuthRepository
 from app.repositories.problem_repository import ProblemRepository
-from app.repositories.submission_repository import SubmissionRepository
 from app.repositories.quest_repository import QuestRepository
+from app.repositories.submission_repository import SubmissionRepository
 from app.repositories.user_repository import UserRepository
+from app.services.manim_queue import ManimQueueService
 from app.services.user_stats_service import UserStatsService
-from app.controllers import QuestController
-from app.controllers.reasoning_controller import ReasoningController
-from app.controllers.manim_controller import ManimController
 
 
 # Repository providers
@@ -42,6 +43,10 @@ def get_user_repo(db: Session = Depends(get_db)) -> UserRepository:
 # Service providers
 def get_user_stats_service(db: Session = Depends(get_db)) -> UserStatsService:
     return UserStatsService(db)
+
+
+def get_manim_queue_service(db: Session = Depends(get_db)) -> ManimQueueService:
+    return ManimQueueService(db)
 
 
 # Controller providers
