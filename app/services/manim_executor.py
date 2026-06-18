@@ -1,3 +1,4 @@
+# pyright: reportArgumentType=false, reportAttributeAccessIssue=false
 import asyncio
 import io
 import json
@@ -17,6 +18,7 @@ from app.config import (
     MANIM_TIMEOUT,
 )
 from app.logging_config import get_logger
+from app.services.manim_backends import ManimBackendPolicy, get_manim_backend_policy
 
 logger: Any = get_logger(__name__)
 
@@ -68,28 +70,42 @@ class ManimExecutor:
         return self._client
 
     async def render(
-        self, manim_code: str, problem_id: int, step_number: int, video_type: str = "calculation"
+        self,
+        manim_code: str,
+        problem_id: int,
+        step_number: int,
+        video_type: str = "calculation",
+        backend: str = "cpu",
+        on_container_started: Callable[[str], None] | None = None,
+        should_cancel: Callable[[], bool] | None = None,
     ) -> dict[str, object]:
         start_time = time.time()
         container = None
         async with self._semaphore:
             try:
                 client = self._get_client()
+                backend_policy: ManimBackendPolicy = get_manim_backend_policy(backend)
                 input_data = {
                     "code": manim_code,
                     "quality": MANIM_RENDER_QUALITY,
                     "scene_name": "MainScene",
                     "timeout": MANIM_TIMEOUT,
                 }
-                container = await _to_thread(
-                    client.containers.create,
-                    image=MANIM_SANDBOX_IMAGE,
-                    command=["python", "manim_runner.py"],
-                    stdin_open=True,
-                    network_disabled=True,
-                    mem_limit="1g",
-                    pids_limit=100,
-                )
+                create_kwargs: dict[str, object] = {
+                    "image": MANIM_SANDBOX_IMAGE,
+                    "command": ["python", "manim_runner.py"],
+                    "stdin_open": True,
+                    "network_disabled": True,
+                    "mem_limit": "1g",
+                    "pids_limit": 100,
+                }
+                create_kwargs.update(backend_policy.docker_kwargs())
+                container = await _to_thread(client.containers.create, **create_kwargs)
+                container_id = getattr(container, "id", None)
+                if on_container_started and isinstance(container_id, str):
+                    on_container_started(container_id)
+                if should_cancel and should_cancel():
+                    return {"status": "cancelled", "error": "Render cancelled before start"}
                 await _to_thread(container.start)
 
                 raw_socket = await _to_thread(container.attach_socket, params={"stdin": True, "stream": True})
@@ -102,6 +118,8 @@ class ManimExecutor:
 
                 wait_task = _to_thread(container.wait, timeout=MANIM_TIMEOUT + 10)
                 _ = await asyncio.wait_for(wait_task, timeout=MANIM_TIMEOUT + 15)
+                if should_cancel and should_cancel():
+                    return {"status": "cancelled", "error": "Render cancelled"}
 
                 stdout_bytes = await _to_thread(container.logs, stdout=True, stderr=False)
                 stdout = stdout_bytes.decode("utf-8", errors="replace").strip()

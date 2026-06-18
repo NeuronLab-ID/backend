@@ -1,3 +1,4 @@
+# pyright: reportArgumentType=false
 """
 NeuronLab Backend - FastAPI Application
 Based on Deep-ML (https://deep-ml.com)
@@ -49,7 +50,19 @@ async def lifespan(app: FastAPI):
             exc,
         )
 
+    from app.services.manim_queue import manim_worker
+
+    try:
+        await manim_worker.start()
+    except Exception as exc:
+        logger.warning("Manim worker could not start: %s", exc)
+
     yield
+
+    try:
+        await manim_worker.stop()
+    except Exception as exc:
+        logger.warning("Error shutting down Manim worker: %s", exc)
 
     # Shutdown container pool (safe even if it never started)
     try:

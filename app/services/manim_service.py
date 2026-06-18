@@ -1,6 +1,7 @@
+# pyright: reportInvalidCast=false
 import re
 import time
-from typing import Any
+from typing import Any, Callable, cast
 
 try:
     from sqlalchemy.orm import Session
@@ -16,7 +17,7 @@ from app.prompts import (
     get_manim_visualization_system_prompt,
 )
 from app.repositories.manim_repository import ManimRepository
-from app.services import get_reasoning_provider
+from app.services import get_provider
 from app.services.manim_executor import manim_executor
 
 logger = get_logger(__name__)
@@ -49,7 +50,7 @@ def _strip_code_fences(code: str) -> str:
 class ManimService:
     def __init__(self, db: Session) -> None:
         self.repository: ManimRepository = ManimRepository(db)
-        self.provider: Any = get_reasoning_provider()
+        self.provider: Any = get_provider("9router")
 
     async def generate_animation(
         self,
@@ -57,6 +58,9 @@ class ManimService:
         step_number: int,
         reasoning_data: dict[str, object],
         video_type: str = "calculation",
+        backend: str = "cpu",
+        on_container_started: Callable[[str], None] | None = None,
+        should_cancel: Callable[[], bool] | None = None,
     ) -> ManimAnimation:
         animation: ManimAnimation | None = None
         try:
@@ -90,19 +94,30 @@ class ManimService:
                 )
             manim_code = await self.provider.generate_reasoning(prompt, system_prompt)
             manim_code = _strip_code_fences(manim_code or "")
+            if not manim_code.strip():
+                raise ValueError("Manim code generation returned empty output")
 
             animation = self.repository.create(problem_id, step_number, manim_code, video_type=video_type)
-            self.repository.update_status(animation.id, "rendering")
+            animation_id = cast(int, animation.id)
+            self.repository.update_status(animation_id, "rendering")
 
             start_time = time.time()
-            result = await manim_executor.render(manim_code, problem_id, step_number, video_type=video_type)
+            result = await manim_executor.render(
+                manim_code,
+                problem_id,
+                step_number,
+                video_type=video_type,
+                backend=backend,
+                on_container_started=on_container_started,
+                should_cancel=should_cancel,
+            )
             render_time_ms = int((time.time() - start_time) * 1000)
 
             if result.get("status") == "success":
                 video_path_value = result.get("video_path")
                 video_path = video_path_value if isinstance(video_path_value, str) else ""
                 self.repository.update_status(
-                    animation.id,
+                    animation_id,
                     "completed",
                     video_path=video_path,
                     render_time_ms=render_time_ms,
@@ -113,7 +128,7 @@ class ManimService:
                     error_message_value if isinstance(error_message_value, str) else str(error_message_value)
                 )
                 self.repository.update_status(
-                    animation.id,
+                    animation_id,
                     "error",
                     error_message=error_message,
                     render_time_ms=render_time_ms,
@@ -125,7 +140,7 @@ class ManimService:
                 f"Failed to generate animation for problem {problem_id} step {step_number} type {video_type}: {e}"
             )
             if animation is not None:
-                self.repository.update_status(animation.id, "error", error_message=str(e))
+                self.repository.update_status(cast(int, animation.id), "error", error_message=str(e))
             raise
 
     async def generate_all_animations(
@@ -133,6 +148,8 @@ class ManimService:
         problem_id: int,
         reasoning_data: dict[str, object],
         video_type: str | None = None,
+        backend: str = "cpu",
+        should_cancel: Callable[[], bool] | None = None,
     ) -> list[ManimAnimation]:
         steps = reasoning_data.get("steps") or reasoning_data.get("sub_quests") or []
         if not isinstance(steps, list):
@@ -145,7 +162,7 @@ class ManimService:
         for index, step in enumerate(steps, 1):
             if not isinstance(step, dict):
                 step = {}
-            step_payload = {
+            step_payload: dict[str, object] = {
                 "step_title": step.get("title", f"Step {index}"),
                 "step_reasoning": step.get("reasoning", ""),
                 "key_formulas": step.get("key_formulas", []),
@@ -153,7 +170,9 @@ class ManimService:
                 "problem_description": problem_description,
             }
             for vtype in types_to_generate:
-                animation = await self.generate_animation(problem_id, index, step_payload, video_type=vtype)  # type: ignore
+                animation = await self.generate_animation(
+                    problem_id, index, step_payload, video_type=vtype, backend=backend, should_cancel=should_cancel
+                )  # type: ignore
                 animations.append(animation)
 
         return animations
