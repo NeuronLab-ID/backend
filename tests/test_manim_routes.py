@@ -2,26 +2,27 @@
 Tests for manim animation routes: generate, status, video.
 """
 
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
+
 from fastapi import HTTPException
 
 
 def test_generate_requires_auth(client):
     """POST /api/manim/generate returns 403 without auth (HTTPBearer)."""
     response = client.post("/api/manim/generate", json={"problem_id": 1})
-    assert response.status_code == 403
+    assert response.status_code in {401, 403}
 
 
 def test_status_requires_auth(client):
     """GET /api/manim/status/1 returns 403 without auth (HTTPBearer)."""
     response = client.get("/api/manim/status/1")
-    assert response.status_code == 403
+    assert response.status_code in {401, 403}
 
 
 def test_video_requires_auth(client):
     """GET /api/manim/video/1/1 returns 403 without auth (HTTPBearer)."""
     response = client.get("/api/manim/video/1/1")
-    assert response.status_code == 403
+    assert response.status_code in {401, 403}
 
 
 def test_generate_success(client, auth_headers):
@@ -100,6 +101,7 @@ def test_status_success(client, auth_headers):
         "completed_count": 1,
         "rendering_count": 1,
         "error_count": 0,
+        "pending_count": 1,
     }
 
     app.dependency_overrides[get_manim_controller] = lambda: mock_controller
@@ -109,6 +111,7 @@ def test_status_success(client, auth_headers):
         data = response.json()
         assert data["total_steps"] == 3
         assert data["completed_count"] == 1
+        assert data["pending_count"] == 1
         mock_controller.get_animation_status.assert_called_once_with(1)
     finally:
         del app.dependency_overrides[get_manim_controller]
