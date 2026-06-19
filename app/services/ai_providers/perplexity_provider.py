@@ -9,18 +9,19 @@ Uses curl_cffi for browser TLS fingerprint impersonation.
 Requires browser cookies for authentication.
 """
 
-import os
 import asyncio
+import os
 import random
 from typing import Optional
+
 from loguru import logger
 
-from .ai_provider_base import AIProvider, SearchProvider
 from app.prompts import (
-    get_perplexity_reasoning_augmentation,
     get_perplexity_hint_prompt,
+    get_perplexity_reasoning_augmentation,
 )
 
+from .ai_provider_base import AIProvider, SearchProvider
 
 # Constants
 PERPLEXITY_URL = "https://www.perplexity.ai/rest/sse/perplexity_ask"
@@ -121,7 +122,7 @@ class PerplexityProvider(AIProvider, SearchProvider):
 
 {augmentation}"""
 
-        logger.info(f"Generating reasoning with Claude 4.5 Sonnet Thinking")
+        logger.info("Generating reasoning with Claude 4.5 Sonnet Thinking")
         return await self._request(
             full_prompt,
             model=PERPLEXITY_MODEL_REASONING,
@@ -298,7 +299,6 @@ Include citations for your sources."""
         Returns:
             dict: Complete thread JSON response or None
         """
-        import json
 
         try:
             from curl_cffi import requests as cffi_requests
@@ -498,10 +498,6 @@ Include citations for your sources."""
         if full_text:
             total_images = sum(len(imgs) for imgs in section_images.values()) + len(standalone_images)
             word_count = len(full_text.split())
-            line_count = full_text.count("\n") + 1
-            latex_blocks = full_text.count("\\[") + full_text.count("$$")
-            inline_math = full_text.count("\\(") + full_text.count("$") - latex_blocks
-            headers = full_text.count("###") + full_text.count("##")
             est_tokens = int(len(full_text) / 4)
 
             logger.info(
@@ -597,7 +593,7 @@ Include citations for your sources."""
                 logger.warning(f"[{log_prefix}] No answer text found after {max_retries + 1} attempts")
                 return None
 
-            except _CookieExpiredError as e:
+            except _CookieExpiredError:
                 logger.error(f"[{log_prefix}] Cookies expired, not retrying")
                 return None
 

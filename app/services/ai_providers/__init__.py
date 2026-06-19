@@ -22,10 +22,10 @@ Usage:
 
 from .ai_provider_base import AIProvider, SearchProvider
 from .ai_provider_factory import (
-    get_provider,
-    get_search_provider,
-    get_reasoning_provider,
     clear_providers,
+    get_provider,
+    get_reasoning_provider,
+    get_search_provider,
 )
 from .openai_provider import OpenAIProvider
 from .perplexity_provider import PerplexityProvider

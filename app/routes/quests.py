@@ -6,30 +6,30 @@ Original: 1162 lines -> Refactored: ~130 lines
 """
 
 from typing import Optional
-from fastapi import APIRouter, Depends
-from starlette.requests import Request
-from sqlalchemy.orm import Session
 
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from starlette.requests import Request
+
+from app.config import SANDBOX_RATE_LIMIT
+from app.controllers import QuestController, check_quest_exists, create_quest
+from app.controllers.reasoning_controller import ReasoningController
 from app.database import get_db
-from app.routes.auth import get_current_user
+from app.dependencies import get_quest_controller, get_reasoning_controller
 from app.models.schemas import (
-    QuestExecuteRequest,
-    QuestCreateRequest,
-    QuestProgressSaveRequest,
-    QuestReasoningRequest,
     FixMermaidRequest,
     PersistMermaidFixRequest,
+    QuestCreateRequest,
+    QuestExecuteRequest,
+    QuestProgressSaveRequest,
+    QuestReasoningRequest,
 )
-from app.controllers import QuestController, create_quest, check_quest_exists
-from app.controllers.reasoning_controller import ReasoningController
-from app.dependencies import get_quest_controller, get_reasoning_controller
+from app.rate_limit import limiter
+from app.routes.auth import get_current_user
 from app.services.reasoning_service import (
     fix_mermaid_code,
     generate_test_case_reasoning,
 )
-from app.rate_limit import limiter
-from app.config import SANDBOX_RATE_LIMIT
-
 
 router = APIRouter()
 

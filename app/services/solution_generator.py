@@ -3,9 +3,11 @@ AI-powered solution generator using the AI Provider pattern.
 """
 
 from typing import Optional
+
 from loguru import logger
+
+from app.prompts import get_solution_prompt, get_solution_system_prompt
 from app.services.ai_providers import get_provider
-from app.prompts import get_solution_system_prompt, get_solution_prompt
 
 
 async def generate_solution(problem: dict) -> Optional[str]:

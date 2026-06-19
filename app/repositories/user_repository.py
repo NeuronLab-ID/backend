@@ -1,11 +1,10 @@
 from datetime import date, timedelta
-
 from typing import Optional
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.db import User, Submission, Problem
+from app.models.db import Problem, Submission, User
 
 
 class UserRepository:
@@ -20,14 +19,14 @@ class UserRepository:
     def get_solved_count(self, user_id: int) -> int:
         return (
             self.db.query(Submission.problem_id)
-            .filter(Submission.user_id == user_id, Submission.passed == True)
+            .filter(Submission.user_id == user_id, Submission.passed.is_(True))
             .distinct()
             .count()
         )
 
     def get_submission_stats(self, user_id: int) -> dict:
         total = self.db.query(Submission).filter(Submission.user_id == user_id).count()
-        passed = self.db.query(Submission).filter(Submission.user_id == user_id, Submission.passed == True).count()
+        passed = self.db.query(Submission).filter(Submission.user_id == user_id, Submission.passed.is_(True)).count()
         return {"total": total, "passed": passed}
 
     def get_recent_submissions(self, user_id: int, limit: int = 10) -> list[Submission]:
@@ -43,7 +42,7 @@ class UserRepository:
         return [
             pid
             for (pid,) in self.db.query(Submission.problem_id)
-            .filter(Submission.user_id == user_id, Submission.passed == True)
+            .filter(Submission.user_id == user_id, Submission.passed.is_(True))
             .distinct()
             .all()
         ]

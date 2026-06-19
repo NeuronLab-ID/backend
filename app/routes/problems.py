@@ -2,17 +2,18 @@
 Problem listing and details routes.
 """
 
-from fastapi import APIRouter, HTTPException, Query, Depends
-from typing import Optional
 import json
+from typing import Optional
 
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from app.dependencies import get_problem_repo
 from app.models.db import Problem
 from app.models.schemas import ProblemListResponse, ProblemSummary
-from app.routes.auth import get_current_user
 from app.repositories.problem_repository import ProblemRepository
-from app.dependencies import get_problem_repo
-from app.utils.encoding import decode_base64_if_needed
+from app.routes.auth import get_current_user
 from app.services.solution_generator import generate_solution
+from app.utils.encoding import decode_base64_if_needed
 
 router = APIRouter()
 

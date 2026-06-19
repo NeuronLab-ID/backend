@@ -4,12 +4,12 @@
 import json
 from pathlib import Path
 
-from sqlalchemy.orm import Session
 from fastapi import HTTPException
+from sqlalchemy.orm import Session
 
+from app.logging_config import get_logger
 from app.repositories.quest_repository import QuestRepository
 from app.services.manim_service import ManimService
-from app.logging_config import get_logger
 
 logger = get_logger(__name__)
 

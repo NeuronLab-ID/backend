@@ -2,17 +2,18 @@
 Code execution routes.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
-from starlette.requests import Request
 import json
 
-from app.routes.auth import get_current_user
-from app.models.schemas import ExecuteRequest, ExecuteResponse
-from app.services.executor import execute_code
-from app.repositories.problem_repository import ProblemRepository
-from app.dependencies import get_problem_repo
-from app.rate_limit import limiter
+from fastapi import APIRouter, Depends, HTTPException
+from starlette.requests import Request
+
 from app.config import SANDBOX_RATE_LIMIT
+from app.dependencies import get_problem_repo
+from app.models.schemas import ExecuteRequest, ExecuteResponse
+from app.rate_limit import limiter
+from app.repositories.problem_repository import ProblemRepository
+from app.routes.auth import get_current_user
+from app.services.executor import execute_code
 
 router = APIRouter()
 

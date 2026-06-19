@@ -6,16 +6,16 @@ Checks database first, falls back to file, then generates using AI.
 import json
 import subprocess
 import sys
-from pathlib import Path
-from typing import Optional
+from pathlib import Path as Path
+from typing import Optional, cast
 
 from sqlalchemy.orm import Session
 
-from app.models.db import Quest, Problem
-from app.config import QUESTS_DIR, QUEST_GENERATOR_PATH
+from app.config import QUEST_GENERATOR_PATH, QUESTS_DIR
+from app.models.db import Problem, Quest
 
 
-async def get_or_generate_quest(db: Session, problem_id: int) -> Optional[dict]:
+async def get_or_generate_quest(db: Session, problem_id: int) -> Optional[dict[str, object]]:
     """
     Get quest for a problem. Tries in order:
     1. Database cache
@@ -28,7 +28,7 @@ async def get_or_generate_quest(db: Session, problem_id: int) -> Optional[dict]:
     cached = db.query(Quest).filter(Quest.problem_id == problem_id).first()
     if cached:
         return {
-            "quest": json.loads(cached.data),
+            "quest": json.loads(cast(str, cast(object, cached.data))),
             "source": "database",
             "problem_id": problem_id,
         }
@@ -53,7 +53,7 @@ async def get_or_generate_quest(db: Session, problem_id: int) -> Optional[dict]:
     return None
 
 
-async def generate_quest_on_demand(db: Session, problem_id: int) -> Optional[dict]:
+async def generate_quest_on_demand(db: Session, problem_id: int) -> Optional[dict[str, object]]:
     """
     Generate quest on-demand using the quest generator script.
     This is a synchronous blocking call that may take 30-60 seconds.
@@ -106,7 +106,7 @@ async def generate_quest_on_demand(db: Session, problem_id: int) -> Optional[dic
         return None
 
 
-def get_quest_status(db: Session, problem_id: int) -> dict:
+def get_quest_status(db: Session, problem_id: int) -> dict[str, object]:
     """
     Get status of quest availability for a problem.
     """

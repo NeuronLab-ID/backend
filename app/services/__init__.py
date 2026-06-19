@@ -12,12 +12,12 @@ AI Providers:
 # Re-export AI providers for convenience
 from .ai_providers import (
     AIProvider,
-    SearchProvider,
-    get_provider,
-    get_search_provider,
-    get_reasoning_provider,
     OpenAIProvider,
     PerplexityProvider,
+    SearchProvider,
+    get_provider,
+    get_reasoning_provider,
+    get_search_provider,
 )
 
 __all__ = [

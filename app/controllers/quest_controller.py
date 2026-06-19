@@ -2,8 +2,9 @@
 # Orchestration layer for quest CRUD and progress operations
 
 import json
-from sqlalchemy.orm import Session
+
 from fastapi import HTTPException
+from sqlalchemy.orm import Session
 
 from app.config import LOCAL_DEV
 from app.models.db import Quest, QuestProgress
@@ -21,8 +22,8 @@ class QuestController:
     async def get_quest(self, problem_id: int, generate: bool = False) -> dict:
         """Get quest for a problem, optionally generating on-demand."""
         from app.services.quest_service import (
-            get_or_generate_quest,
             generate_quest_on_demand,
+            get_or_generate_quest,
         )
 
         result = await get_or_generate_quest(self.db, problem_id)

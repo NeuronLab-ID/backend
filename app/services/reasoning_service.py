@@ -1,21 +1,27 @@
 # Reasoning Service
 # Handles AI-powered reasoning generation for quests
 
-import json
-import asyncio
-from typing import AsyncIterator, Optional
+from typing import Any, AsyncIterator, Optional
 
-from app.services import get_provider, get_search_provider, get_reasoning_provider
 from app.prompts import (
+    get_mermaid_fix_prompt,
+    get_mermaid_fix_system_prompt,
     get_step_reasoning_prompt,
     get_step_system_prompt,
     get_summary_prompt,
     get_summary_system_prompt,
-    get_mermaid_fix_prompt,
-    get_mermaid_fix_system_prompt,
     get_test_case_reasoning_prompt,
     get_test_case_reasoning_system_prompt,
 )
+from app.services import get_reasoning_provider, get_search_provider
+
+JsonDict = dict[str, Any]
+
+
+def get_provider():
+    from app.services.ai_providers import get_provider as resolve_provider
+
+    return resolve_provider()
 
 
 class ReasoningService:
@@ -44,7 +50,7 @@ class ReasoningService:
         title: str,
         relation: str,
         definition: str,
-        key_formulas: list,
+        key_formulas: list[JsonDict],
         function_signature: str,
         example_input: str,
         example_output: str,
@@ -75,7 +81,7 @@ class ReasoningService:
         reasoning = await self.reasoning_provider.generate_reasoning(prompt, system_prompt)
         return reasoning if reasoning else f"[Error generating reasoning for step {step}]"
 
-    async def generate_summary(self, all_steps: list) -> str:
+    async def generate_summary(self, all_steps: list[JsonDict]) -> str:
         """Generate a summary connecting all steps."""
         steps_summary = "\n".join([f"Step {s['step']}: {s['title']} - {s['reasoning'][:100]}..." for s in all_steps])
 
@@ -85,7 +91,7 @@ class ReasoningService:
         summary = await self.reasoning_provider.generate_reasoning(prompt, system_prompt)
         return summary if summary else "[Error generating summary]"
 
-    async def search_web_references(self, quest_data: dict, sub_quests: list) -> tuple[str, str]:
+    async def search_web_references(self, quest_data: JsonDict, sub_quests: list[JsonDict]) -> tuple[str, str]:
         """
         Perform a single web search covering all steps.
 
@@ -119,13 +125,13 @@ Each step should build on the previous step's results using this consistent data
 
         return "", ""
 
-    async def stream_full_reasoning(self, quest_data: dict, sub_quests: list) -> AsyncIterator[dict]:
+    async def stream_full_reasoning(self, quest_data: JsonDict, sub_quests: list[JsonDict]) -> AsyncIterator[JsonDict]:
         """
         Stream reasoning generation for all quest steps.
 
         Yields SSE-formatted events with types: search, search_result, search_complete, step, summary, done, error
         """
-        all_steps = []
+        all_steps: list[JsonDict] = []
         previous_context = ""
 
         # Step 0: Web search
@@ -207,8 +213,6 @@ Each step should build on the previous step's results using this consistent data
 
 async def fix_mermaid_code(code: str, error: str) -> str:
     """Use AI to fix invalid Mermaid diagram code."""
-    from app.services.ai_providers import get_provider
-
     try:
         provider = get_provider()
 
@@ -232,10 +236,8 @@ async def fix_mermaid_code(code: str, error: str) -> str:
         return code
 
 
-async def generate_test_case_reasoning(function_signature: str, test_input: str, expected_output: str) -> dict:
+async def generate_test_case_reasoning(function_signature: str, test_input: str, expected_output: str) -> dict[str, str]:
     """Generate step-by-step reasoning for a test case."""
-    from app.services.ai_providers import get_provider
-
     try:
         provider = get_provider()
 

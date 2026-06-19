@@ -2,16 +2,16 @@
 from fastapi import APIRouter
 
 from app.routes.auth import router as auth_router
-from app.routes.problems import router as problems_router
-from app.routes.execution import router as execution_router
-from app.routes.submissions import router as submissions_router
-from app.routes.quests import router as quests_router
-from app.routes.hints import router as hints_router
-from app.routes.users import router as users_router
-from app.routes.math_samples import router as math_samples_router
 from app.routes.cookies import router as cookies_router
+from app.routes.execution import router as execution_router
 from app.routes.exports import router as exports_router
+from app.routes.hints import router as hints_router
 from app.routes.manim import router as manim_router
+from app.routes.math_samples import router as math_samples_router
+from app.routes.problems import router as problems_router
+from app.routes.quests import router as quests_router
+from app.routes.submissions import router as submissions_router
+from app.routes.users import router as users_router
 
 # Aggregate all routers
 api_router = APIRouter()

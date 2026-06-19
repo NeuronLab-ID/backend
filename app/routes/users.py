@@ -2,15 +2,15 @@
 User profile and progress routes.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.dependencies import get_user_stats_service
 from app.models.db import User
 from app.models.schemas import UserUpdate
 from app.routes.auth import get_current_user
 from app.services.user_stats_service import UserStatsService
-from app.dependencies import get_user_stats_service
 
 router = APIRouter()
 

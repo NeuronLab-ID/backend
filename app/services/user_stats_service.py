@@ -4,8 +4,8 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.models.db import Quest, QuestProgress
-from app.repositories.user_repository import UserRepository
 from app.repositories.problem_repository import ProblemRepository
+from app.repositories.user_repository import UserRepository
 
 
 class UserStatsService:
@@ -54,7 +54,7 @@ class UserStatsService:
 
         progress_rows = (
             self.user_repo.db.query(QuestProgress.problem_id, QuestProgress.step)
-            .filter(QuestProgress.user_id == user_id, QuestProgress.completed == True)
+            .filter(QuestProgress.user_id == user_id, QuestProgress.completed.is_(True))
             .all()
         )
 

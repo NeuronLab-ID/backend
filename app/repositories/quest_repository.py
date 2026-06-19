@@ -2,6 +2,7 @@
 # Handles all database operations for Quest, QuestProgress, and QuestReasoning
 
 from sqlalchemy.orm import Session
+
 from app.models.db import Quest, QuestProgress, QuestReasoning
 
 

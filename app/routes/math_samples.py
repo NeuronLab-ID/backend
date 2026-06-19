@@ -9,7 +9,6 @@ from pydantic import BaseModel
 from app.routes.auth import get_current_user
 from app.services.math_sample_service import MathSampleService
 
-
 router = APIRouter()
 
 

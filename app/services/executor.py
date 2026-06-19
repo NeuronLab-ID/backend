@@ -21,8 +21,8 @@ from docker.errors import APIError, DockerException, NotFound
 from docker.models.containers import Container
 
 from app.config import (
-    SANDBOX_IMAGE,
     SANDBOX_CONTAINER_TTL,
+    SANDBOX_IMAGE,
     SANDBOX_MAX_EXECUTIONS,
     SANDBOX_MEMORY,
     SANDBOX_PIDS_LIMIT,

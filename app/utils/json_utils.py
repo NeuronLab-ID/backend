@@ -3,10 +3,10 @@
 
 import json
 import re
-from typing import Any
+from contextlib import suppress
 
 
-def try_parse_json(text: str) -> dict | None:
+def try_parse_json(text: str) -> dict[str, object] | None:
     """Try multiple strategies to parse potentially malformed JSON.
     
     Args:
@@ -16,31 +16,25 @@ def try_parse_json(text: str) -> dict | None:
         Parsed dict or None if parsing fails
     """
     # Strategy 1: Direct parse
-    try:
+    with suppress(BaseException):
         return json.loads(text)
-    except:
-        pass
-    
+
     # Strategy 2: Fix unescaped backslashes in LaTeX
-    try:
+    with suppress(BaseException):
         fixed = text.replace("\\", "\\\\")
         # But keep valid escape sequences
         fixed = fixed.replace("\\\\n", "\\n").replace("\\\\t", "\\t")
         fixed = fixed.replace('\\\\"', '\\"')
         return json.loads(fixed)
-    except:
-        pass
-    
+
     # Strategy 3: Extract JSON object using regex
-    try:
+    with suppress(BaseException):
         match = re.search(r'\{[^{}]*"steps"\s*:\s*\[[^\]]*\][^{}]*"result"\s*:[^}]*\}', text, re.DOTALL)
         if match:
             return json.loads(match.group())
-    except:
-        pass
-    
+
     # Strategy 4: Try to reconstruct from partial content
-    try:
+    with suppress(BaseException):
         # Find steps array
         steps_match = re.search(r'"steps"\s*:\s*\[(.*?)\]', text, re.DOTALL)
         result_match = re.search(r'"result"\s*:\s*"([^"]*)"', text)
@@ -51,9 +45,7 @@ def try_parse_json(text: str) -> dict | None:
             steps = re.findall(r'"([^"]*(?:\\"[^"]*)*)"', steps_content)
             result = result_match.group(1) if result_match else ""
             return {"steps": steps, "result": result}
-    except:
-        pass
-    
+
     return None
 
 

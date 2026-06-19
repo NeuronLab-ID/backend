@@ -3,7 +3,7 @@ Database setup using SQLAlchemy.
 """
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from app.config import DATABASE_URL
 
@@ -27,17 +27,6 @@ def get_db():
 
 def create_tables():
     """Create all database tables."""
-    from app.models.db import (
-        User,
-        Submission,
-        Quest,
-        QuestProgress,
-        ProblemSolution,
-        Problem,
-        QuestReasoning,
-        ReasoningExport,
-        ManimAnimation,
-        ManimRenderJob,
-    )  # noqa
+    from app.models import db as _models_db  # noqa: F401
 
     Base.metadata.create_all(bind=engine)

@@ -2,17 +2,18 @@
 AI hint generation routes.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session
 import json
 
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
 from app.database import get_db
-from app.routes.auth import get_current_user
+from app.dependencies import get_problem_repo
 from app.models.db import Quest
 from app.models.schemas import HintRequest, QuestHintRequest
-from app.services.ai_providers import get_provider
 from app.repositories.problem_repository import ProblemRepository
-from app.dependencies import get_problem_repo
+from app.routes.auth import get_current_user
+from app.services.ai_providers import get_provider
 
 router = APIRouter()
 

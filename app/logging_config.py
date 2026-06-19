@@ -8,6 +8,7 @@ Configure via .env:
 """
 import os
 import sys
+
 from loguru import logger
 
 # Remove default handler

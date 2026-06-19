@@ -2,15 +2,13 @@
 Submission CRUD routes.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException
 
-from app.database import get_db
-from app.routes.auth import get_current_user
+from app.dependencies import get_submission_repo
 from app.models.db import Submission
 from app.models.schemas import SaveSubmissionRequest
 from app.repositories.submission_repository import SubmissionRepository
-from app.dependencies import get_submission_repo
+from app.routes.auth import get_current_user
 
 router = APIRouter()
 

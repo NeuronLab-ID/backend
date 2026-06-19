@@ -3,14 +3,13 @@
 
 import re
 from datetime import datetime
-from typing import Optional
 
-from app.services import get_search_provider, get_reasoning_provider
 from app.prompts import (
     get_latex_export_prompt,
     get_latex_export_system_prompt,
     get_markdown_export_prompt,
 )
+from app.services import get_reasoning_provider, get_search_provider
 
 
 def convert_latex_delimiters(text: str) -> str:

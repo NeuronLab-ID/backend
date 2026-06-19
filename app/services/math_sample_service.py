@@ -2,14 +2,15 @@
 # Handles AI-powered math sample generation
 
 from loguru import logger
-from app.services.ai_providers import get_provider
+
 from app.prompts.math_prompts import (
-    get_sample_prompt,
     get_retry_prompt,
-    get_system_prompt,
     get_retry_system_prompt,
+    get_sample_prompt,
+    get_system_prompt,
 )
-from app.utils.json_utils import try_parse_json, clean_ai_response
+from app.services.ai_providers import get_provider
+from app.utils.json_utils import clean_ai_response, try_parse_json
 
 
 class MathSampleService:

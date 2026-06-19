@@ -2,21 +2,18 @@
 Authentication routes.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.config import JWT_SECRET, JWT_ALGORITHM
-from app.database import get_db
-from app.models.db import User
-from app.models.schemas import UserCreate, UserLogin, Token, UserResponse
-from app.repositories.auth_repository import AuthRepository
 from app.dependencies import get_auth_repo
+from app.models.db import User
+from app.models.schemas import Token, UserCreate, UserLogin, UserResponse
+from app.repositories.auth_repository import AuthRepository
 from app.services.auth_service import (
-    hash_password,
-    verify_password,
     create_access_token,
     decode_token,
+    hash_password,
+    verify_password,
 )
 
 router = APIRouter()

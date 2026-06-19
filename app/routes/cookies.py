@@ -2,12 +2,11 @@
 Cookie update endpoint for Perplexity browser extension.
 Receives cookies from the extension and updates the .env file.
 """
-import os
 from datetime import datetime
 from pathlib import Path
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-
 
 router = APIRouter(tags=["cookies"])
 

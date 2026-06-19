@@ -10,8 +10,9 @@ Follows sequential generation pattern like stream_full_reasoning.
 import json
 import re
 from typing import Optional
+
 import nbformat
-from nbformat.v4 import new_notebook, new_markdown_cell, new_code_cell
+from nbformat.v4 import new_code_cell, new_markdown_cell, new_notebook
 
 from app.services.ai_providers import get_reasoning_provider
 
