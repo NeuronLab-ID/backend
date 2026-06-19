@@ -44,6 +44,36 @@ def test_generate_animation_success() -> None:
     }
 
 
+def test_service_uses_default_manim_code_provider(monkeypatch) -> None:
+    monkeypatch.delenv("MANIM_CODE_PROVIDER", raising=False)
+    mock_repo = MagicMock()
+    mock_provider = MagicMock()
+
+    with (
+        patch("app.services.manim_service.ManimRepository", return_value=mock_repo),
+        patch("app.services.manim_service.get_provider", return_value=mock_provider) as get_provider_mock,
+    ):
+        service = ManimService(MagicMock())
+
+    assert service.provider == mock_provider
+    get_provider_mock.assert_called_once_with("openai-compatible")
+
+
+def test_service_uses_env_manim_code_provider(monkeypatch) -> None:
+    monkeypatch.setenv("MANIM_CODE_PROVIDER", "9router")
+    mock_repo = MagicMock()
+    mock_provider = MagicMock()
+
+    with (
+        patch("app.services.manim_service.ManimRepository", return_value=mock_repo),
+        patch("app.services.manim_service.get_provider", return_value=mock_provider) as get_provider_mock,
+    ):
+        service = ManimService(MagicMock())
+
+    assert service.provider == mock_provider
+    get_provider_mock.assert_called_once_with("9router")
+
+
 def test_generate_animation_render_failure() -> None:
     manim_code = "from manim import *\nclass MainScene(Scene):\n    pass"
     mock_provider = MagicMock()

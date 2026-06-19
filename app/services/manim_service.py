@@ -1,4 +1,5 @@
 # pyright: reportInvalidCast=false
+import os
 import re
 import time
 from typing import Any, Callable, cast
@@ -8,6 +9,7 @@ try:
 except Exception:  # pragma: no cover
     from typing import Any as Session
 
+from app.config import MANIM_CODE_PROVIDER
 from app.logging_config import get_logger
 from app.models.db import ManimAnimation
 from app.prompts import (
@@ -50,7 +52,7 @@ def _strip_code_fences(code: str) -> str:
 class ManimService:
     def __init__(self, db: Session) -> None:
         self.repository: ManimRepository = ManimRepository(db)
-        self.provider: Any = get_provider("9router")
+        self.provider: Any = get_provider(os.getenv("MANIM_CODE_PROVIDER", MANIM_CODE_PROVIDER))
 
     async def generate_animation(
         self,

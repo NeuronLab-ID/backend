@@ -1,6 +1,9 @@
 # pyright: reportGeneralTypeIssues=false, reportArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false
+import importlib
 from datetime import datetime, timedelta, timezone
 
+import app.config as app_config
+import app.repositories.manim_repository as manim_repository_module
 from app.models.db import ManimAnimation, ManimRenderJob
 from app.repositories.manim_repository import ManimRepository
 
@@ -23,6 +26,29 @@ def test_create_job_persists_separate_lifecycle(db_session):
     assert job.requested_backend == "cpu"
     assert job.animation_id is None
     assert db_session.query(ManimRenderJob).filter_by(job_id=job.job_id).one()
+
+
+def test_create_job_uses_canonical_openai_compatible_model_override(db_session, monkeypatch):
+    monkeypatch.setenv("MANIM_OPENAI_COMPATIBLE_MODEL", "canonical-model")
+    monkeypatch.setenv("MANIM_9ROUTER_MODEL", "legacy-model")
+    _ = importlib.reload(app_config)
+    reloaded_repository_module = importlib.reload(manim_repository_module)
+    try:
+        repo = reloaded_repository_module.ManimRepository(db_session)
+
+        job = repo.create_job(
+            user_id=7,
+            problem_id=12,
+            step_number=3,
+            video_type="calculation",
+            requested_backend="cpu",
+        )
+
+        assert job.provider == "9router"
+        assert job.model == "canonical-model"
+    finally:
+        _ = importlib.reload(app_config)
+        _ = importlib.reload(manim_repository_module)
 
 
 def test_claim_update_cancel_and_retry_job(db_session):
