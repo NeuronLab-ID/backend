@@ -10,7 +10,7 @@ from typing import Optional
 
 from .ai_provider_base import AIProvider, SearchProvider
 from .openai_provider import OpenAIProvider
-from .opencode_config import load_9router_opencode_config
+from .opencode_config import load_manim_openai_compatible_config
 from .perplexity_provider import PerplexityProvider
 
 # Singleton instances
@@ -22,7 +22,8 @@ def get_provider(provider_type: Optional[str] = None) -> AIProvider:
     Get an AI provider instance.
 
     Args:
-        provider_type: "openai", "9router", or "perplexity". If None, defaults to "openai"
+        provider_type: "openai", "openai-compatible", "manim-openai-compatible", "9router", or "perplexity".
+            If None, defaults to "openai"
 
     Returns:
         AIProvider instance
@@ -30,15 +31,19 @@ def get_provider(provider_type: Optional[str] = None) -> AIProvider:
     if provider_type is None:
         provider_type = "openai"
 
+    canonical_provider_type = provider_type
+    if provider_type in {"9router", "openai-compatible", "manim-openai-compatible"}:
+        canonical_provider_type = "manim-openai-compatible"
+
     # Return cached instance if available
-    if provider_type in _providers:
-        return _providers[provider_type]
+    if canonical_provider_type in _providers:
+        return _providers[canonical_provider_type]
 
     # Create new provider
     if provider_type == "openai":
         provider = OpenAIProvider()
-    elif provider_type == "9router":
-        cfg = load_9router_opencode_config()
+    elif canonical_provider_type == "manim-openai-compatible":
+        cfg = load_manim_openai_compatible_config()
         provider = OpenAIProvider(
             model=cfg.model,
             api_key=cfg.api_key,
@@ -51,7 +56,7 @@ def get_provider(provider_type: Optional[str] = None) -> AIProvider:
     else:
         raise ValueError(f"Unknown provider type: {provider_type}")
 
-    _providers[provider_type] = provider
+    _providers[canonical_provider_type] = provider
     return provider
 
 
