@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.config import MANIM_9ROUTER_MODEL
+from app.config import get_manim_code_provider_metadata
 from app.models.db import ManimAnimation, ManimRenderJob
 
 ACTIVE_JOB_STATUSES = {"queued", "generating_code", "rendering", "cancelling"}
@@ -194,6 +194,7 @@ class ManimRepository:
             if existing:
                 return existing
 
+        provider, model = get_manim_code_provider_metadata()
         job = ManimRenderJob(
             job_id=uuid.uuid4().hex,
             user_id=user_id,
@@ -205,8 +206,8 @@ class ManimRepository:
             progress=0,
             attempt=1,
             max_attempts=max_attempts,
-            provider="9router",
-            model=MANIM_9ROUTER_MODEL or "cx/gpt-5.5-xhigh",
+            provider=provider,
+            model=model,
             request_hash=request_hash,
             idempotency_key=idempotency_key,
             queued_at=_now(),
@@ -285,6 +286,16 @@ class ManimRepository:
             return None
         if job.status in {"succeeded", "failed_retryable", "failed_terminal", "cancelled", "orphaned"}:
             return job
+        if job.status == "queued":
+            now = _now()
+            job.status = "cancelled"
+            job.progress = 100
+            job.cancel_requested_at = now
+            job.finished_at = now
+            job.updated_at = now
+            self.db.commit()
+            self.db.refresh(job)
+            return job
         job.status = "cancelling"
         job.cancel_requested_at = _now()
         job.updated_at = job.cancel_requested_at
@@ -294,7 +305,11 @@ class ManimRepository:
 
     def retry_job(self, job_id: str, user_id: int) -> ManimRenderJob | None:
         original = self.get_job(job_id, user_id=user_id)
-        if not original or original.status not in RETRYABLE_JOB_STATUSES:
+        if (
+            not original
+            or original.status not in RETRYABLE_JOB_STATUSES
+            or original.attempt >= original.max_attempts
+        ):
             return None
         job = ManimRenderJob(
             job_id=uuid.uuid4().hex,
@@ -338,5 +353,10 @@ class ManimRepository:
         return len(jobs)
 
     def should_cancel(self, job_id: str) -> bool:
-        job = self.get_job(job_id)
+        job = (
+            self.db.query(ManimRenderJob)
+            .populate_existing()
+            .filter(ManimRenderJob.job_id == job_id)
+            .first()
+        )
         return bool(job and job.status == "cancelling")
