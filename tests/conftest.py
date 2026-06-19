@@ -3,16 +3,18 @@ Test configuration and fixtures.
 Provides in-memory SQLite database, FastAPI TestClient, mock AI providers, and test user.
 """
 
-import pytest
+import asyncio
+from typing import override
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.database import Base, get_db
-from app.models.db import User, Problem
-from app.services.auth_service import hash_password, create_access_token
-
+from app.models.db import Problem, User
+from app.services.auth_service import create_access_token, hash_password
 
 # In-memory SQLite for tests
 TEST_DATABASE_URL = "sqlite://"
@@ -20,6 +22,22 @@ test_engine = create_engine(
     TEST_DATABASE_URL, connect_args={"check_same_thread": False}
 )
 TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+
+
+class LegacyEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
+    @override
+    def get_event_loop(self):
+        try:
+            return super().get_event_loop()
+        except RuntimeError:
+            loop = self.new_event_loop()
+            self.set_event_loop(loop)
+            return loop
+
+
+@pytest.fixture(scope="session")
+def event_loop_policy():
+    return LegacyEventLoopPolicy()
 
 
 @pytest.fixture(scope="function")

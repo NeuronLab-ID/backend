@@ -4,8 +4,6 @@ Verifies that AI-fixed mermaid diagrams are correctly persisted to reasoning dat
 """
 
 import json
-import pytest
-from fastapi import HTTPException
 
 from app.models.db import QuestReasoning
 
@@ -213,5 +211,5 @@ def test_persist_mermaid_fix_requires_auth(db_session, client, sample_problem):
         json={"problem_id": sample_problem.id, "original_code": "graph TD\nA-->B", "fixed_code": "graph TD;\nA-->B;"},
     )
 
-    # Assert: Response 403 (Forbidden - no auth header provided)
-    assert response.status_code == 403
+    # Assert: Response 401 (Unauthorized - no auth header provided)
+    assert response.status_code == 401
