@@ -4,7 +4,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.manim_service import ManimService, _strip_code_fences
+from app.services.manim_service import ManimJobCancelledError, ManimService, _strip_code_fences
 
 
 def test_generate_animation_success() -> None:
@@ -110,6 +110,67 @@ def test_generate_animation_render_failure() -> None:
     }
 
 
+def test_generate_animation_cancel_before_provider_skips_work() -> None:
+    mock_provider = MagicMock()
+    mock_provider.generate_reasoning = AsyncMock(return_value="code")
+    mock_repo = MagicMock()
+
+    with (
+        patch("app.services.manim_service.ManimRepository", return_value=mock_repo),
+        patch("app.services.manim_service.get_provider", return_value=mock_provider),
+        patch("app.services.manim_service.manim_executor") as mock_executor,
+    ):
+        service = ManimService(MagicMock())
+        reasoning_data = {
+            "step_title": "Intro",
+            "step_reasoning": "Explain",
+            "key_formulas": [],
+            "problem_title": "Sample",
+            "problem_description": "Desc",
+        }
+        with pytest.raises(ManimJobCancelledError):
+            asyncio.get_event_loop().run_until_complete(
+                service.generate_animation(2, 1, reasoning_data, should_cancel=lambda: True)
+            )
+
+    mock_provider.generate_reasoning.assert_not_called()
+    mock_repo.create.assert_not_called()
+    mock_executor.render.assert_not_called()
+
+
+def test_generate_animation_cancel_after_provider_skips_repo_and_executor() -> None:
+    mock_provider = MagicMock()
+    mock_provider.generate_reasoning = AsyncMock(return_value="code")
+    mock_repo = MagicMock()
+    calls = {"count": 0}
+
+    def should_cancel() -> bool:
+        calls["count"] += 1
+        return calls["count"] >= 2
+
+    with (
+        patch("app.services.manim_service.ManimRepository", return_value=mock_repo),
+        patch("app.services.manim_service.get_provider", return_value=mock_provider),
+        patch("app.services.manim_service.manim_executor") as mock_executor,
+    ):
+        service = ManimService(MagicMock())
+        reasoning_data = {
+            "step_title": "Intro",
+            "step_reasoning": "Explain",
+            "key_formulas": [],
+            "problem_title": "Sample",
+            "problem_description": "Desc",
+        }
+        with pytest.raises(ManimJobCancelledError):
+            asyncio.get_event_loop().run_until_complete(
+                service.generate_animation(2, 1, reasoning_data, should_cancel=should_cancel)
+            )
+
+    mock_provider.generate_reasoning.assert_called_once()
+    mock_repo.create.assert_not_called()
+    mock_executor.render.assert_not_called()
+
+
 def test_generate_all_animations() -> None:
     """When video_type=None, both visualization and calculation are generated per step."""
     mock_provider = MagicMock()
@@ -144,6 +205,42 @@ def test_generate_all_animations() -> None:
     assert service.generate_animation.call_args_list[2].kwargs.get("video_type") == "visualization"
     assert service.generate_animation.call_args_list[3].args[0:2] == (5, 2)
     assert service.generate_animation.call_args_list[3].kwargs.get("video_type") == "calculation"
+
+
+def test_generate_all_animations_stops_before_next_iteration_when_cancelled() -> None:
+    mock_provider = MagicMock()
+    mock_repo = MagicMock()
+    calls = {"count": 0}
+
+    def should_cancel() -> bool:
+        calls["count"] += 1
+        return calls["count"] >= 3
+
+    with (
+        patch("app.services.manim_service.ManimRepository", return_value=mock_repo),
+        patch("app.services.manim_service.get_provider", return_value=mock_provider),
+    ):
+        service = ManimService(MagicMock())
+        service.generate_animation = AsyncMock(return_value="first")
+        reasoning_data = {
+            "problem_title": "Sample",
+            "problem_description": "Desc",
+            "steps": [
+                {"title": "Step A", "reasoning": "A"},
+                {"title": "Step B", "reasoning": "B"},
+            ],
+        }
+        with pytest.raises(ManimJobCancelledError):
+            asyncio.get_event_loop().run_until_complete(
+                service.generate_all_animations(
+                    5,
+                    reasoning_data,
+                    video_type="calculation",
+                    should_cancel=should_cancel,
+                )
+            )
+
+    assert len(service.generate_animation.call_args_list) == 1
 
 
 def test_get_animation_status_delegates() -> None:

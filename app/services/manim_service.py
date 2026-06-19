@@ -1,5 +1,4 @@
 # pyright: reportInvalidCast=false
-import os
 import re
 import time
 from typing import Any, Callable, cast
@@ -9,7 +8,7 @@ try:
 except Exception:  # pragma: no cover
     from typing import Any as Session
 
-from app.config import MANIM_CODE_PROVIDER
+from app.config import get_manim_code_provider_name
 from app.logging_config import get_logger
 from app.models.db import ManimAnimation
 from app.prompts import (
@@ -23,6 +22,10 @@ from app.services import get_provider
 from app.services.manim_executor import manim_executor
 
 logger = get_logger(__name__)
+
+
+class ManimJobCancelledError(Exception):
+    pass
 
 
 def _strip_code_fences(code: str) -> str:
@@ -52,7 +55,7 @@ def _strip_code_fences(code: str) -> str:
 class ManimService:
     def __init__(self, db: Session) -> None:
         self.repository: ManimRepository = ManimRepository(db)
-        self.provider: Any = get_provider(os.getenv("MANIM_CODE_PROVIDER", MANIM_CODE_PROVIDER))
+        self.provider: Any = get_provider(get_manim_code_provider_name())
 
     async def generate_animation(
         self,
@@ -94,7 +97,11 @@ class ManimService:
                     problem_title=problem_title,
                     problem_description=problem_description,
                 )
+            if should_cancel and should_cancel():
+                raise ManimJobCancelledError("Manim job cancelled before code generation")
             manim_code = await self.provider.generate_reasoning(prompt, system_prompt)
+            if should_cancel and should_cancel():
+                raise ManimJobCancelledError("Manim job cancelled after code generation")
             manim_code = _strip_code_fences(manim_code or "")
             if not manim_code.strip():
                 raise ValueError("Manim code generation returned empty output")
@@ -162,6 +169,8 @@ class ManimService:
         animations: list[ManimAnimation] = []
         types_to_generate = [video_type] if video_type else ["visualization", "calculation"]
         for index, step in enumerate(steps, 1):
+            if should_cancel and should_cancel():
+                raise ManimJobCancelledError("Manim job cancelled during animation generation")
             if not isinstance(step, dict):
                 step = {}
             step_payload: dict[str, object] = {
@@ -172,6 +181,8 @@ class ManimService:
                 "problem_description": problem_description,
             }
             for vtype in types_to_generate:
+                if should_cancel and should_cancel():
+                    raise ManimJobCancelledError("Manim job cancelled during animation generation")
                 animation = await self.generate_animation(
                     problem_id, index, step_payload, video_type=vtype, backend=backend, should_cancel=should_cancel
                 )  # type: ignore

@@ -16,9 +16,10 @@ from app.models.db import ManimRenderJob
 from app.repositories.manim_repository import ManimRepository
 from app.repositories.quest_repository import QuestRepository
 from app.services.manim_backends import get_manim_backend_policy, list_manim_backend_policies
-from app.services.manim_service import ManimService
+from app.services.manim_service import ManimJobCancelledError, ManimService
 
 logger = get_logger(__name__)
+
 
 def serialize_manim_job(job: ManimRenderJob) -> dict[str, Any]:
     return {
@@ -107,6 +108,9 @@ class ManimQueueService:
         return job
 
     def retry_job(self, job_id: str, user_id: int) -> ManimRenderJob:
+        existing = self.repository.get_job(job_id, user_id=user_id)
+        if not existing:
+            raise HTTPException(404, "Manim job not found")
         job = self.repository.retry_job(job_id, user_id)
         if not job:
             raise HTTPException(400, "Manim job is not retryable")
@@ -187,6 +191,9 @@ class ManimWorker:
             quest_repo = QuestRepository(db)
             reasoning = quest_repo.get_reasoning(job.problem_id)
             if not reasoning:
+                if repo.should_cancel(job_id):
+                    repo.update_job(job_id, status="cancelled", progress=100, finished=True)
+                    return
                 repo.update_job(
                     job_id,
                     status="failed_terminal",
@@ -203,6 +210,9 @@ class ManimWorker:
                 return
 
             service = ManimService(db)
+            if repo.should_cancel(job_id):
+                repo.update_job(job_id, status="cancelled", progress=100, finished=True)
+                return
             repo.update_job(job_id, status="rendering", progress=50)
             started = time.time()
             animation = await self._run_generation(
@@ -231,21 +241,38 @@ class ManimWorker:
                 )
             if animation.render_time_ms is None:
                 repo.update_status(animation_id, animation_status, render_time_ms=int((time.time() - started) * 1000))
-        except HTTPException as exc:
+        except ManimJobCancelledError as exc:
             db.rollback()
             repo = ManimRepository(db)
             repo.update_job(
                 job_id,
-                status="failed_terminal",
+                status="cancelled",
                 progress=100,
-                error_code="backend_unavailable",
-                error_message=str(exc.detail),
+                error_code="cancelled",
+                error_message=str(exc),
                 finished=True,
             )
+        except HTTPException as exc:
+            db.rollback()
+            repo = ManimRepository(db)
+            if repo.should_cancel(job_id):
+                repo.update_job(job_id, status="cancelled", progress=100, finished=True)
+            else:
+                repo.update_job(
+                    job_id,
+                    status="failed_terminal",
+                    progress=100,
+                    error_code="backend_unavailable",
+                    error_message=str(exc.detail),
+                    finished=True,
+                )
         except Exception as exc:
             db.rollback()
             repo = ManimRepository(db)
             job = repo.get_job(job_id)
+            if job and job.status == "cancelling":
+                repo.update_job(job_id, status="cancelled", progress=100, finished=True)
+                return
             attempt = job.attempt if job else 1
             max_attempts = job.max_attempts if job else 1
             status, code = classify_failure(exc=exc, attempt=attempt, max_attempts=max_attempts)

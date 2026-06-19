@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+from fastapi import HTTPException
+
 
 def _job(job_id="job123", status="queued"):
     return SimpleNamespace(
@@ -14,7 +16,7 @@ def _job(job_id="job123", status="queued"):
         progress=0,
         attempt=1,
         max_attempts=2,
-        provider="9router",
+        provider="openai-compatible",
         model="cx/gpt-5.5-xhigh",
         animation_id=None,
         error_code=None,
@@ -119,8 +121,40 @@ def test_get_cancel_and_retry_job_contracts(client, auth_headers):
 
     assert status_response.status_code == 200
     assert status_response.json()["status"] == "rendering"
-    assert status_response.json()["provider"] == "9router"
+    assert status_response.json()["provider"] == "openai-compatible"
     assert cancel_response.status_code == 200
     assert cancel_response.json() == {"job_id": "job123", "status": "cancelling"}
     assert retry_response.status_code == 202
     assert retry_response.json()["job_id"] == "retry123"
+
+
+def test_retry_job_route_returns_404_for_missing_job(client, auth_headers):
+    from app.dependencies import get_manim_queue_service
+    from main import app
+
+    queue = MagicMock()
+    queue.retry_job.side_effect = HTTPException(404, "Manim job not found")
+    app.dependency_overrides[get_manim_queue_service] = lambda: queue
+    try:
+        response = client.post("/api/manim/jobs/missing/retry", headers=auth_headers)
+    finally:
+        del app.dependency_overrides[get_manim_queue_service]
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Manim job not found"
+
+
+def test_retry_job_route_returns_400_for_nonretryable_job(client, auth_headers):
+    from app.dependencies import get_manim_queue_service
+    from main import app
+
+    queue = MagicMock()
+    queue.retry_job.side_effect = HTTPException(400, "Manim job is not retryable")
+    app.dependency_overrides[get_manim_queue_service] = lambda: queue
+    try:
+        response = client.post("/api/manim/jobs/exhausted/retry", headers=auth_headers)
+    finally:
+        del app.dependency_overrides[get_manim_queue_service]
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Manim job is not retryable"
