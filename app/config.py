@@ -73,6 +73,21 @@ MANIM_9ROUTER_BASE_URL = MANIM_OPENAI_COMPATIBLE_BASE_URL
 MANIM_9ROUTER_API_KEY = MANIM_OPENAI_COMPATIBLE_API_KEY
 OPENCODE_CONFIG_PATH = Path(os.getenv("OPENCODE_CONFIG_PATH", str(Path.home() / ".config" / "opencode" / "opencode.json")))
 
+
+def get_manim_code_provider_name() -> str:
+    return os.getenv("MANIM_CODE_PROVIDER", MANIM_CODE_PROVIDER)
+
+
+def get_manim_code_model_name() -> str:
+    canonical_model = os.getenv("MANIM_OPENAI_COMPATIBLE_MODEL", "")
+    if canonical_model:
+        return canonical_model
+    return os.getenv("MANIM_9ROUTER_MODEL", "") or MANIM_OPENAI_COMPATIBLE_MODEL or _DEFAULT_MANIM_OPENAI_COMPATIBLE_MODEL
+
+
+def get_manim_code_provider_metadata() -> tuple[str, str]:
+    return get_manim_code_provider_name(), get_manim_code_model_name()
+
 # Feature flags
 LOCAL_DEV = os.getenv("LOCAL_DEV", "false").lower() == "true"
 

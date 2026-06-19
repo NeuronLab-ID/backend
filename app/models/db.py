@@ -175,7 +175,7 @@ class ManimRenderJob(Base):
     progress = Column(Integer, nullable=False, default=0)
     attempt = Column(Integer, nullable=False, default=1)
     max_attempts = Column(Integer, nullable=False, default=2)
-    provider = Column(String(50), nullable=False, default="9router")
+    provider = Column(String(50), nullable=False, default="openai-compatible")
     model = Column(String(100), nullable=False, default="cx/gpt-5.5-xhigh")
     container_id = Column(String(128), nullable=True)
     animation_id = Column(Integer, nullable=True)
