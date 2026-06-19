@@ -4,7 +4,8 @@ Provides in-memory SQLite database, FastAPI TestClient, mock AI providers, and t
 """
 
 import asyncio
-from typing import override
+from collections.abc import Callable, Iterator
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -24,20 +25,31 @@ test_engine = create_engine(
 TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 
-class LegacyEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
-    @override
-    def get_event_loop(self):
-        try:
-            return super().get_event_loop()
-        except RuntimeError:
-            loop = self.new_event_loop()
-            self.set_event_loop(loop)
-            return loop
+def pytest_asyncio_loop_factories() -> dict[str, Callable[[], asyncio.AbstractEventLoop]]:
+    return {"default": asyncio.new_event_loop}
 
 
-@pytest.fixture(scope="session")
-def event_loop_policy():
-    return LegacyEventLoopPolicy()
+LEGACY_SYNC_EVENT_LOOP_MODULES = {
+    Path("tests/test_manim_service.py"),
+    Path("tests/test_quest_controller.py"),
+    Path("tests/test_reasoning.py"),
+    Path("tests/test_services.py"),
+}
+
+
+@pytest.fixture(autouse=True)
+def legacy_sync_event_loop(request: pytest.FixtureRequest) -> Iterator[None]:
+    if Path(str(request.node.path)).relative_to(Path.cwd()) not in LEGACY_SYNC_EVENT_LOOP_MODULES:
+        yield
+        return
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        yield
+    finally:
+        asyncio.set_event_loop(None)
+        loop.close()
 
 
 @pytest.fixture(scope="function")
