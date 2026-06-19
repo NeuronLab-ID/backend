@@ -24,6 +24,7 @@ logger: Any = get_logger(__name__)
 
 P = ParamSpec("P")
 T = TypeVar("T")
+MANIM_CANCEL_POLL_INTERVAL_SECONDS = 0.1
 
 
 async def _to_thread(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
@@ -116,10 +117,27 @@ class ManimExecutor:
                 await _to_thread(sock.shutdown, 2)
                 await _to_thread(raw_socket.close)
 
-                wait_task = _to_thread(container.wait, timeout=MANIM_TIMEOUT + 10)
-                _ = await asyncio.wait_for(wait_task, timeout=MANIM_TIMEOUT + 15)
-                if should_cancel and should_cancel():
-                    return {"status": "cancelled", "error": "Render cancelled"}
+                wait_task = asyncio.create_task(_to_thread(container.wait, timeout=MANIM_TIMEOUT + 10))
+                wait_deadline = time.time() + MANIM_TIMEOUT + 15
+                while not wait_task.done():
+                    if should_cancel and should_cancel():
+                        elapsed_ms = int((time.time() - start_time) * 1000)
+                        try:
+                            await _to_thread(container.remove, force=True)
+                            container = None
+                        except NotFound:
+                            container = None
+                        wait_task.cancel()
+                        return {
+                            "status": "cancelled",
+                            "error": "Render cancelled",
+                            "render_time_ms": elapsed_ms,
+                        }
+                    if time.time() >= wait_deadline:
+                        wait_task.cancel()
+                        raise asyncio.TimeoutError
+                    await asyncio.sleep(MANIM_CANCEL_POLL_INTERVAL_SECONDS)
+                _ = wait_task.result()
 
                 stdout_bytes = await _to_thread(container.logs, stdout=True, stderr=False)
                 stdout = stdout_bytes.decode("utf-8", errors="replace").strip()
