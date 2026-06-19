@@ -4,7 +4,7 @@ All AI providers are mocked — no real API keys needed.
 """
 
 import asyncio
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 def test_reasoning_service_instantiation():
@@ -33,7 +33,7 @@ def test_fix_mermaid_code_mocked():
     """fix_mermaid_code returns fixed code via provider."""
     from app.services.reasoning_service import fix_mermaid_code
 
-    with patch("app.services.reasoning_service.get_provider") as mock_get_provider:
+    with patch("app.services.reasoning_service.get_provider"):
         # fix_mermaid_code imports get_provider from ai_providers inside the function
         pass
 

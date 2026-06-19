@@ -2,10 +2,12 @@
 Tests for ManimRepository CRUD operations.
 """
 
-import pytest
 from datetime import datetime, timezone
-from app.repositories.manim_repository import ManimRepository
+
+import pytest
+
 from app.models.db import ManimAnimation
+from app.repositories.manim_repository import ManimRepository
 
 
 @pytest.fixture
@@ -297,7 +299,7 @@ class TestManimRepositoryGetStatusSummary:
         anim1 = manim_repo.create(1, 1, "code1")
         anim2 = manim_repo.create(1, 2, "code2")
         anim3 = manim_repo.create(1, 3, "code3")
-        anim4 = manim_repo.create(1, 4, "code4")
+        manim_repo.create(1, 4, "code4")
 
         # Update statuses
         manim_repo.update_status(anim1.id, "completed", video_path="/v1.mp4")

@@ -2,8 +2,8 @@
 Tests for authentication routes: register, login, /me.
 """
 
-from unittest.mock import patch, MagicMock
 from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 
 
 def test_register_success(client, test_user):

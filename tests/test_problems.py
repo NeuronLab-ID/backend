@@ -2,7 +2,7 @@
 Tests for problem listing, detail, and solution routes.
 """
 
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock, patch
 
 
 def test_list_problems(client, sample_problem):

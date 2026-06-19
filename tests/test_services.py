@@ -8,7 +8,7 @@ All AI providers are mocked — no real API keys needed.
 import asyncio
 import importlib
 import json
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 
 class TestSolutionGenerator:

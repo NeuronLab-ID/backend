@@ -2,9 +2,9 @@
 Unit tests for correlated reasoning generation.
 Tests that each step receives context from previous steps.
 """
+from unittest.mock import MagicMock
+
 import pytest
-import json
-from unittest.mock import MagicMock, patch, AsyncMock
 
 
 class MockOpenAIResponse:

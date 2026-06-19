@@ -10,7 +10,6 @@ from fastapi.testclient import TestClient
 
 from app.database import get_db
 
-
 MOCK_EXECUTE_RESULT = {
     "success": True,
     "results": [],

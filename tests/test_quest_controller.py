@@ -2,8 +2,9 @@
 Tests for QuestController: quest retrieval and progress management.
 """
 
-import pytest
 import asyncio
+
+import pytest
 from fastapi import HTTPException
 
 from app.controllers.quest_controller import QuestController

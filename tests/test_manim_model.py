@@ -2,8 +2,8 @@
 Tests for ManimAnimation model.
 """
 
-import pytest
 from datetime import datetime, timezone
+
 from app.models.db import ManimAnimation
 
 

@@ -2,10 +2,7 @@
 Tests for Manim animation configuration variables.
 """
 
-import os
 from pathlib import Path
-
-import pytest
 
 from app import config
 

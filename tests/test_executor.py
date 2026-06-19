@@ -5,12 +5,11 @@ All Docker SDK calls are mocked — no Docker daemon required.
 
 import asyncio
 import time
-
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.services.executor import ContainerPool, execute_code
+import pytest
 
+from app.services.executor import ContainerPool, execute_code
 
 # ==================== execute_code() tests ====================
 

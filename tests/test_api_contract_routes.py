@@ -13,7 +13,6 @@ from unittest.mock import AsyncMock, patch
 from app.models.db import Quest, Submission
 from app.routes.auth import get_current_user
 
-
 AUTHENTICATED_USER_ID = 1
 
 

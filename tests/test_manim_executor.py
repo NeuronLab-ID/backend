@@ -5,10 +5,9 @@ Tests for ManimExecutor with fully mocked Docker client.
 import asyncio
 import io
 import tarfile
+from unittest.mock import MagicMock, patch
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-
 from docker.errors import DockerException
 
 from app.services.manim_executor import ManimExecutor

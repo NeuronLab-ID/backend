@@ -3,10 +3,10 @@
 import re
 
 from app.prompts import (
-    get_manim_code_system_prompt,
     get_manim_code_prompt,
-    get_manim_visualization_system_prompt,
+    get_manim_code_system_prompt,
     get_manim_visualization_prompt,
+    get_manim_visualization_system_prompt,
 )
 
 
