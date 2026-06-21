@@ -10,7 +10,7 @@ import json
 from contextlib import contextmanager
 from unittest.mock import AsyncMock, patch
 
-from app.models.db import Quest, Submission
+from app.models.db import Problem, ProblemSolution, Quest, ReasoningExport, Submission, User
 from app.routes.auth import get_current_user
 
 AUTHENTICATED_USER_ID = 1
@@ -128,3 +128,224 @@ def test_submissions_contract_is_wrapped(client, db_session, sample_problem):
             "created_at": submission.created_at.isoformat(),
         }
     ]
+
+
+def test_problem_detail_omits_example_when_missing(client, sample_problem):
+    with authenticated(client) as authed_client:
+        response = authed_client.get(f"/api/problems/{sample_problem.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert set(data.keys()) == {
+        "id",
+        "title",
+        "category",
+        "difficulty",
+        "description",
+        "starter_code",
+        "test_cases",
+        "learn",
+    }
+    assert "example" not in data
+    assert "video" not in data
+    assert "pytorch_test_cases" not in data
+    assert "tinygrad_test_cases" not in data
+    assert "cuda_test_cases" not in data
+    assert data["description"] == "A test problem description"
+    assert data["learn"] == "Learn about testing"
+    assert data["test_cases"] == [{"test": "solution()", "expected_output": "42"}]
+
+
+def test_problem_detail_parses_framework_and_video_json(client, db_session):
+    problem = Problem(
+        id=1,
+        title="Framework Problem",
+        category="Linear Algebra",
+        difficulty="medium",
+        description="Rich problem detail description",
+        starter_code="def solution():\n    pass",
+        test_cases=json.dumps([{"test": "solution()", "expected_output": "1"}]),
+        example=json.dumps({"input": "a", "output": "b", "reasoning": "c"}),
+        video=json.dumps({"url": "https://youtu.be/abc123", "title": "Intro"}),
+        pytorch_starter_code="import torch",
+        pytorch_test_cases=json.dumps([{"test": "torch_solution()", "expected_output": "t1"}]),
+        tinygrad_starter_code="from tinygrad import Tensor",
+        tinygrad_test_cases=json.dumps([{"test": "tg_solution()", "expected_output": "t2"}]),
+        cuda_starter_code="__global__ void k(){}",
+        cuda_test_cases=json.dumps([{"test": "cuda_solution()", "expected_output": "t3"}]),
+    )
+    db_session.add(problem)
+    db_session.commit()
+    db_session.refresh(problem)
+    with authenticated(client) as authed_client:
+        response = authed_client.get(f"/api/problems/{problem.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["example"] == {"input": "a", "output": "b", "reasoning": "c"}
+    assert data["video"] == {"url": "https://youtu.be/abc123", "title": "Intro"}
+    assert data["pytorch_test_cases"] == [{"test": "torch_solution()", "expected_output": "t1"}]
+    assert data["tinygrad_test_cases"] == [{"test": "tg_solution()", "expected_output": "t2"}]
+    assert data["cuda_test_cases"] == [{"test": "cuda_solution()", "expected_output": "t3"}]
+
+
+def test_problem_detail_video_falls_back_to_string(client, db_session):
+    problem = Problem(
+        id=1,
+        title="Video String Problem",
+        category="Linear Algebra",
+        difficulty="easy",
+        description="Video string fallback case",
+        starter_code="def solution():\n    pass",
+        test_cases=json.dumps([{"test": "solution()", "expected_output": "1"}]),
+        video="https://youtu.be/plainstring",
+    )
+    db_session.add(problem)
+    db_session.commit()
+    db_session.refresh(problem)
+    with authenticated(client) as authed_client:
+        response = authed_client.get(f"/api/problems/{problem.id}")
+    assert response.status_code == 200
+    assert response.json()["video"] == "https://youtu.be/plainstring"
+
+
+def test_problem_solution_returns_cached_contract(client, db_session, sample_problem):
+    solution_code = "def solution():\n    return 42"
+    solution = ProblemSolution(problem_id=sample_problem.id, solution=solution_code)
+    db_session.add(solution)
+    db_session.commit()
+    db_session.refresh(solution)
+    with authenticated(client) as authed_client:
+        response = authed_client.get(f"/api/problems/{sample_problem.id}/solution")
+    assert response.status_code == 200
+    assert response.json() == {"solution": solution_code, "cached": True}
+
+
+def test_export_markdown_returns_cached_contract(client, db_session, sample_problem):
+    markdown = "# Reasoning\n\nCached markdown body."
+    export = ReasoningExport(
+        problem_id=sample_problem.id,
+        export_type="markdown",
+        content=markdown,
+        ai_model="pplx_alpha",
+        created_by=AUTHENTICATED_USER_ID,
+    )
+    db_session.add(export)
+    db_session.commit()
+    db_session.refresh(export)
+    with authenticated(client) as authed_client:
+        response = authed_client.post(
+            f"/api/quest/export-markdown/{sample_problem.id}",
+            params={"use_ai": "true"},
+        )
+    assert response.status_code == 200
+    assert response.json() == {"markdown": markdown, "enhanced": True, "cached": True}
+
+
+def test_export_latex_returns_cached_contract(client, db_session, sample_problem):
+    latex = "\\documentclass{article}\\begin{document}Cached\\end{document}"
+    export = ReasoningExport(
+        problem_id=sample_problem.id,
+        export_type="latex",
+        content=latex,
+        ai_model="pplx_alpha",
+        created_by=AUTHENTICATED_USER_ID,
+    )
+    db_session.add(export)
+    db_session.commit()
+    db_session.refresh(export)
+    with authenticated(client) as authed_client:
+        response = authed_client.post(f"/api/quest/export-latex/{sample_problem.id}")
+    assert response.status_code == 200
+    assert response.json() == {
+        "latex": latex,
+        "ai_generated": True,
+        "model": "pplx_alpha",
+        "cached": True,
+    }
+
+
+def test_user_profile_envelope_contract(client, db_session):
+    user = User(
+        id=AUTHENTICATED_USER_ID,
+        username="profileuser",
+        email="profile@example.com",
+        password_hash="hashed",
+        display_name="Ada",
+        bio="builder",
+        avatar_url="https://img/avatar.png",
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    with authenticated(client) as authed_client:
+        response = authed_client.get("/api/user/profile")
+    assert response.status_code == 200
+    data = response.json()
+    assert set(data.keys()) == {
+        "user",
+        "stats",
+        "difficulty_breakdown",
+        "recent_activity",
+        "calendar_data",
+        "category_progress",
+        "achievements",
+    }
+    assert set(data["user"].keys()) == {
+        "id",
+        "username",
+        "email",
+        "created_at",
+        "display_name",
+        "bio",
+        "avatar_url",
+    }
+    assert data["user"]["id"] == AUTHENTICATED_USER_ID
+    assert data["user"]["display_name"] == "Ada"
+    assert set(data["stats"].keys()) == {
+        "problems_solved",
+        "total_submissions",
+        "success_rate",
+        "streak",
+        "paths_completed",
+        "rank",
+    }
+    assert data["difficulty_breakdown"] == {"easy": 0, "medium": 0, "hard": 0}
+    assert data["recent_activity"] == []
+
+
+def test_user_profile_update_accepts_supported_fields_only(client, db_session):
+    user = User(
+        id=AUTHENTICATED_USER_ID,
+        username="profileuser",
+        email="profile@example.com",
+        password_hash="hashed",
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    with authenticated(client) as authed_client:
+        response = authed_client.put(
+            "/api/user/profile",
+            json={
+                "display_name": "Grace",
+                "bio": "compiler pioneer",
+                "avatar_url": "https://img/grace.png",
+                "username": "hacked",
+                "email": "hacked@example.com",
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert set(data.keys()) == {
+        "user",
+        "stats",
+        "difficulty_breakdown",
+        "recent_activity",
+        "calendar_data",
+        "category_progress",
+        "achievements",
+    }
+    assert data["user"]["display_name"] == "Grace"
+    assert data["user"]["bio"] == "compiler pioneer"
+    assert data["user"]["avatar_url"] == "https://img/grace.png"
+    assert data["user"]["username"] == "profileuser"
+    assert data["user"]["email"] == "profile@example.com"
