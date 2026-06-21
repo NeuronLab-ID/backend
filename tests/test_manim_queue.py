@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -39,6 +40,55 @@ def test_queue_retry_exhausted_job_returns_400(db_session):
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail == "Manim job is not retryable"
+
+
+def test_worker_reconcile_cleans_recorded_stale_containers(db_session):
+    repo = ManimRepository(db_session)
+    job = repo.create_job(user_id=1, problem_id=32, step_number=1, video_type="calculation", requested_backend="cpu")
+    job_id = getattr(job, "job_id")
+    repo.claim_next_job()
+    repo.update_job(job_id, status="rendering", container_id="stale-container")
+    persisted = repo.get_job(job_id)
+    assert persisted is not None
+    setattr(persisted, "updated_at", datetime.now(timezone.utc) - timedelta(hours=2))
+    db_session.commit()
+
+    worker = ManimWorker()
+    with (
+        patch("app.services.manim_queue.SessionLocal", return_value=db_session),
+        patch("app.services.manim_queue.MANIM_STALE_JOB_SECONDS", 60),
+        patch("app.services.manim_queue.manim_executor.cleanup_container") as cleanup_container,
+    ):
+        worker._reconcile_orphaned_jobs()
+
+    cleanup_container.assert_called_once_with("stale-container")
+    reconciled = repo.get_job(job_id)
+    assert reconciled is not None
+    assert getattr(reconciled, "status") == "orphaned"
+
+
+def test_worker_reconcile_container_cleanup_failure_is_non_fatal(db_session):
+    repo = ManimRepository(db_session)
+    job = repo.create_job(user_id=1, problem_id=33, step_number=1, video_type="calculation", requested_backend="cpu")
+    job_id = getattr(job, "job_id")
+    repo.claim_next_job()
+    repo.update_job(job_id, status="rendering", container_id="stale-container")
+    persisted = repo.get_job(job_id)
+    assert persisted is not None
+    setattr(persisted, "updated_at", datetime.now(timezone.utc) - timedelta(hours=2))
+    db_session.commit()
+
+    worker = ManimWorker()
+    with (
+        patch("app.services.manim_queue.SessionLocal", return_value=db_session),
+        patch("app.services.manim_queue.MANIM_STALE_JOB_SECONDS", 60),
+        patch("app.services.manim_queue.manim_executor.cleanup_container", side_effect=RuntimeError("docker down")),
+    ):
+        worker._reconcile_orphaned_jobs()
+
+    reconciled = repo.get_job(job_id)
+    assert reconciled is not None
+    assert getattr(reconciled, "status") == "orphaned"
 
 
 @pytest.mark.asyncio

@@ -16,6 +16,7 @@ from app.models.db import ManimRenderJob
 from app.repositories.manim_repository import ManimRepository
 from app.repositories.quest_repository import QuestRepository
 from app.services.manim_backends import get_manim_backend_policy, list_manim_backend_policies
+from app.services.manim_executor import manim_executor
 from app.services.manim_service import ManimJobCancelledError, ManimService
 
 logger = get_logger(__name__)
@@ -168,9 +169,16 @@ class ManimWorker:
         db = SessionLocal()
         try:
             cutoff = datetime.now(timezone.utc) - timedelta(seconds=MANIM_STALE_JOB_SECONDS)
-            count = ManimRepository(db).mark_stale_jobs_orphaned(cutoff)
+            repo = ManimRepository(db)
+            container_ids = repo.list_stale_active_container_ids(cutoff)
+            count = repo.mark_stale_jobs_orphaned(cutoff)
             if count:
                 logger.warning("Marked %s stale Manim jobs as orphaned", count)
+                for container_id in container_ids:
+                    try:
+                        manim_executor.cleanup_container(container_id)
+                    except Exception as exc:
+                        logger.warning("Failed to clean up recorded orphaned Manim container %s: %s", container_id, exc)
         finally:
             db.close()
 
