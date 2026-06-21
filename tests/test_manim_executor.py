@@ -8,7 +8,7 @@ import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
-from docker.errors import DockerException
+from docker.errors import APIError, DockerException, NotFound
 
 from app.services.manim_executor import ManimExecutor
 
@@ -197,3 +197,28 @@ async def test_check_docker_available_false_on_exception():
         available = await executor.check_docker_available()
 
     assert available is False
+
+
+def test_cleanup_container_force_removes_recorded_container():
+    executor = ManimExecutor()
+    mock_client = MagicMock()
+    mock_container = MagicMock()
+    mock_client.containers.get.return_value = mock_container
+
+    with patch("app.services.manim_executor.docker.from_env", return_value=mock_client):
+        executor.cleanup_container("container-123")
+
+    mock_client.containers.get.assert_called_once_with("container-123")
+    mock_container.remove.assert_called_once_with(force=True)
+
+
+def test_cleanup_container_ignores_not_found_and_cleanup_errors():
+    executor = ManimExecutor()
+    mock_client = MagicMock()
+    mock_client.containers.get.side_effect = [NotFound("missing"), APIError("docker unavailable")]
+
+    with patch("app.services.manim_executor.docker.from_env", return_value=mock_client):
+        executor.cleanup_container("missing-container")
+        executor.cleanup_container("broken-container")
+
+    assert mock_client.containers.get.call_count == 2

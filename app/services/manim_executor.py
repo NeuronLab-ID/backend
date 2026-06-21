@@ -228,5 +228,16 @@ class ManimExecutor:
         except DockerException:
             return False
 
+    def cleanup_container(self, container_id: str) -> None:
+        try:
+            container = self._get_client().containers.get(container_id)
+            container.remove(force=True)
+        except NotFound:
+            pass
+        except (DockerException, APIError) as exc:
+            logger.warning("Failed to clean up orphaned manim container {}: {}", container_id, exc)
+        except Exception as exc:
+            logger.warning("Unexpected error cleaning up orphaned manim container {}: {}", container_id, exc)
+
 
 manim_executor = ManimExecutor()
