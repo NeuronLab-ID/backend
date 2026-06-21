@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 from datetime import datetime, timezone
+from typing import cast
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -311,6 +312,26 @@ class ManimRepository:
             or original.attempt >= original.max_attempts
         ):
             return None
+        next_attempt = original.attempt + 1
+        existing = (
+            self.db.query(ManimRenderJob)
+            .filter(
+                ManimRenderJob.user_id == original.user_id,
+                ManimRenderJob.problem_id == original.problem_id,
+                ManimRenderJob.step_number == original.step_number,
+                ManimRenderJob.video_type == original.video_type,
+                ManimRenderJob.requested_backend == original.requested_backend,
+                ManimRenderJob.request_hash == original.request_hash,
+                ManimRenderJob.provider == original.provider,
+                ManimRenderJob.model == original.model,
+                ManimRenderJob.max_attempts == original.max_attempts,
+                ManimRenderJob.attempt == next_attempt,
+            )
+            .order_by(ManimRenderJob.created_at.desc())
+            .first()
+        )
+        if existing:
+            return existing
         job = ManimRenderJob(
             job_id=uuid.uuid4().hex,
             user_id=original.user_id,
@@ -320,7 +341,7 @@ class ManimRepository:
             requested_backend=original.requested_backend,
             status="queued",
             progress=0,
-            attempt=original.attempt + 1,
+            attempt=next_attempt,
             max_attempts=original.max_attempts,
             provider=original.provider,
             model=original.model,
@@ -332,6 +353,20 @@ class ManimRepository:
         self.db.commit()
         self.db.refresh(job)
         return job
+
+    def list_stale_active_container_ids(self, cutoff: datetime) -> list[str]:
+        rows = cast(
+            "list[tuple[str | None]]",
+            self.db.query(ManimRenderJob.container_id)
+            .filter(
+                ManimRenderJob.status.in_(("generating_code", "rendering", "cancelling")),
+                or_(ManimRenderJob.updated_at.is_(None), ManimRenderJob.updated_at < cutoff),
+                ManimRenderJob.container_id.is_not(None),
+                ManimRenderJob.container_id != "",
+            )
+            .all(),
+        )
+        return [container_id for (container_id,) in rows if container_id]
 
     def mark_stale_jobs_orphaned(self, cutoff: datetime) -> int:
         jobs = (

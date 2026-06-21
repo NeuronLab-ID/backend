@@ -241,6 +241,27 @@ def test_retry_job_creates_attempt_two_when_bounded(db_session):
     assert retry.request_hash == job.request_hash
 
 
+def test_retry_job_reuses_existing_next_attempt_for_same_source(db_session):
+    repo = ManimRepository(db_session)
+    job = repo.create_job(
+        user_id=1,
+        problem_id=25,
+        step_number=1,
+        video_type="visualization",
+        requested_backend="cpu",
+        max_attempts=3,
+    )
+    repo.update_job(job.job_id, status="failed_retryable", progress=100, finished=True)
+
+    first_retry = repo.retry_job(job.job_id, user_id=1)
+    second_retry = repo.retry_job(job.job_id, user_id=1)
+
+    assert first_retry is not None
+    assert second_retry is not None
+    assert second_retry.job_id == first_retry.job_id
+    assert db_session.query(ManimRenderJob).count() == 2
+
+
 def test_queued_cancel_becomes_terminal_and_is_not_claimed(db_session):
     repo = ManimRepository(db_session)
     job = repo.create_job(user_id=1, problem_id=22, step_number=1, video_type="calculation", requested_backend="cpu")
